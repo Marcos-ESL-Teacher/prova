@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -35,27 +36,34 @@ function gerarNomeDaProva(
 }
 
 export default function Home() {
+  const searchParams = useSearchParams();
+
+  const bookParam = searchParams.get("book");
+  const modeParam = searchParams.get("mode");
+  const chapterParam = searchParams.get("chapter");
+  const subParam = searchParams.get("sub");
+
   const [nome, setNome] = useState("");
 
-  const [book, setBook] = useState("SBS Book 1 Plus");
+  const [book, setBook] = useState(bookParam || "SBS Book 1 Plus");
 
-  // "chapter" ou "hometest"
-  const [mode, setMode] = useState<"chapter" | "hometest">("chapter");
+  const [mode, setMode] = useState<"chapter" | "hometest">(
+    modeParam === "hometest" ? "hometest" : "chapter"
+  );
 
-  // capítulo selecionado
-  const [chapter, setChapter] = useState("Chapter 1");
+  const [chapter, setChapter] = useState(chapterParam || "Chapter 1");
 
-  // dentro de chapter:
-  // "Provas" ou "Exercícios Extras"
   const [chapterSubfolder, setChapterSubfolder] = useState<
     "Provas" | "Exercícios Extras"
-  >("Provas");
+  >(
+    subParam === "Exercícios Extras" ? "Exercícios Extras" : "Provas"
+  );
 
-  // dentro de HomeTest:
-  // "HomeTest-Mid" ou "HomeTest-Final"
   const [homeTestSubfolder, setHomeTestSubfolder] = useState<
     "HomeTest-Mid" | "HomeTest-Final"
-  >("HomeTest-Mid");
+  >(
+    subParam === "HomeTest-Final" ? "HomeTest-Final" : "HomeTest-Mid"
+  );
 
   const [q1, setQ1] = useState("");
   const [q2, setQ2] = useState("");
@@ -126,6 +134,8 @@ export default function Home() {
     setQ2("");
   }
 
+  const usingFixedLink = !!bookParam || !!modeParam || !!chapterParam || !!subParam;
+
   return (
     <div
       style={{
@@ -143,9 +153,9 @@ export default function Home() {
           padding: 30,
           borderRadius: 16,
           width: "100%",
-          maxWidth: 550,
+          maxWidth: 560,
           boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-          fontFamily: "Arial",
+          fontFamily: "Arial, sans-serif",
         }}
       >
         <h1 style={{ textAlign: "center", marginBottom: 20 }}>
@@ -163,74 +173,101 @@ export default function Home() {
           style={inputStyle}
         />
 
-        <label style={labelStyle}>Livro</label>
-        <select
-          value={book}
-          onChange={(e) => setBook(e.target.value)}
-          style={inputStyle}
-        >
-          {BOOKS.map((b) => (
-            <option key={b} value={b}>
-              {b}
-            </option>
-          ))}
-        </select>
-
-        <label style={labelStyle}>Tipo de pasta</label>
-        <select
-          value={mode}
-          onChange={(e) => setMode(e.target.value as "chapter" | "hometest")}
-          style={inputStyle}
-        >
-          <option value="chapter">Chapter</option>
-          <option value="hometest">HomeTest</option>
-        </select>
-
-        {mode === "chapter" ? (
+        {!usingFixedLink && (
           <>
-            <label style={labelStyle}>Chapter</label>
+            <label style={labelStyle}>Livro</label>
             <select
-              value={chapter}
-              onChange={(e) => setChapter(e.target.value)}
+              value={book}
+              onChange={(e) => setBook(e.target.value)}
               style={inputStyle}
             >
-              {chapters.map((c) => (
-                <option key={c} value={c}>
-                  {c}
+              {BOOKS.map((b) => (
+                <option key={b} value={b}>
+                  {b}
                 </option>
               ))}
             </select>
 
-            <label style={labelStyle}>Subpasta</label>
+            <label style={labelStyle}>Tipo de pasta</label>
             <select
-              value={chapterSubfolder}
-              onChange={(e) =>
-                setChapterSubfolder(
-                  e.target.value as "Provas" | "Exercícios Extras"
-                )
-              }
+              value={mode}
+              onChange={(e) => setMode(e.target.value as "chapter" | "hometest")}
               style={inputStyle}
             >
-              <option value="Provas">Provas</option>
-              <option value="Exercícios Extras">Exercícios Extras</option>
+              <option value="chapter">Chapter</option>
+              <option value="hometest">HomeTest</option>
             </select>
+
+            {mode === "chapter" ? (
+              <>
+                <label style={labelStyle}>Chapter</label>
+                <select
+                  value={chapter}
+                  onChange={(e) => setChapter(e.target.value)}
+                  style={inputStyle}
+                >
+                  {chapters.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+
+                <label style={labelStyle}>Subpasta</label>
+                <select
+                  value={chapterSubfolder}
+                  onChange={(e) =>
+                    setChapterSubfolder(
+                      e.target.value as "Provas" | "Exercícios Extras"
+                    )
+                  }
+                  style={inputStyle}
+                >
+                  <option value="Provas">Provas</option>
+                  <option value="Exercícios Extras">Exercícios Extras</option>
+                </select>
+              </>
+            ) : (
+              <>
+                <label style={labelStyle}>Subpasta HomeTest</label>
+                <select
+                  value={homeTestSubfolder}
+                  onChange={(e) =>
+                    setHomeTestSubfolder(
+                      e.target.value as "HomeTest-Mid" | "HomeTest-Final"
+                    )
+                  }
+                  style={inputStyle}
+                >
+                  <option value="HomeTest-Mid">HomeTest-Mid</option>
+                  <option value="HomeTest-Final">HomeTest-Final</option>
+                </select>
+              </>
+            )}
           </>
-        ) : (
-          <>
-            <label style={labelStyle}>Subpasta HomeTest</label>
-            <select
-              value={homeTestSubfolder}
-              onChange={(e) =>
-                setHomeTestSubfolder(
-                  e.target.value as "HomeTest-Mid" | "HomeTest-Final"
-                )
-              }
-              style={inputStyle}
-            >
-              <option value="HomeTest-Mid">HomeTest-Mid</option>
-              <option value="HomeTest-Final">HomeTest-Final</option>
-            </select>
-          </>
+        )}
+
+        {usingFixedLink && (
+          <div
+            style={{
+              background: "#f8fafc",
+              border: "1px solid #e5e7eb",
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 14,
+            }}
+          >
+            <p style={{ margin: "4px 0" }}>
+              <strong>Livro:</strong> {book}
+            </p>
+            <p style={{ margin: "4px 0" }}>
+              <strong>Pasta:</strong> {mode === "chapter" ? chapter : "HomeTest"}
+            </p>
+            <p style={{ margin: "4px 0" }}>
+              <strong>Tipo:</strong>{" "}
+              {mode === "chapter" ? chapterSubfolder : homeTestSubfolder}
+            </p>
+          </div>
         )}
 
         <label style={labelStyle}>Pergunta 1</label>
