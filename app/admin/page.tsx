@@ -31,6 +31,31 @@ function corrigir(answers: any) {
   };
 }
 
+function agruparEstrutura(dados: any[]) {
+  const estrutura: Record<
+    string,
+    Record<string, Record<string, Record<string, any[]>>>
+  > = {};
+
+  for (const item of dados) {
+    const aluno = item.student_name || "Sem nome";
+    const livro = item.book_name || "Sem livro";
+    const unidade = item.unit_folder || "Sem pasta";
+    const subpasta = item.subfolder_name || "Sem subpasta";
+
+    if (!estrutura[aluno]) estrutura[aluno] = {};
+    if (!estrutura[aluno][livro]) estrutura[aluno][livro] = {};
+    if (!estrutura[aluno][livro][unidade]) estrutura[aluno][livro][unidade] = {};
+    if (!estrutura[aluno][livro][unidade][subpasta]) {
+      estrutura[aluno][livro][unidade][subpasta] = [];
+    }
+
+    estrutura[aluno][livro][unidade][subpasta].push(item);
+  }
+
+  return estrutura;
+}
+
 export default function AdminPage() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -188,6 +213,8 @@ export default function AdminPage() {
     );
   }
 
+  const estrutura = agruparEstrutura(dados);
+
   return (
     <div style={styles.page}>
       <div style={styles.topBar}>
@@ -208,7 +235,7 @@ export default function AdminPage() {
       </div>
 
       <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>📋 Provas enviadas</h2>
+        <h2 style={styles.sectionTitle}>📚 Estrutura por aluno / livro / pasta</h2>
 
         {dados.length === 0 && (
           <div style={styles.emptyState}>
@@ -216,53 +243,64 @@ export default function AdminPage() {
           </div>
         )}
 
-        <div style={styles.grid}>
-          {dados.map((item) => {
-            const resultado = corrigir(item.answers || {});
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {Object.entries(estrutura).map(([aluno, livros]) => (
+            <div key={aluno} style={styles.folderCard}>
+              <h2 style={{ marginTop: 0 }}>📁 {aluno}</h2>
 
-            return (
-              <div key={item.id} style={styles.card}>
-                <div style={styles.cardHeader}>
-                  <div>
-                    <h3 style={styles.studentName}>
-                      🧑‍🎓 {item.student_name || "Sem nome"}
-                    </h3>
-                    <p style={styles.smallText}>📅 {item.created_at}</p>
-                  </div>
+              {Object.entries(livros).map(([livro, unidades]) => (
+                <div key={livro} style={{ marginLeft: 20, marginBottom: 16 }}>
+                  <h3>📂 {livro}</h3>
 
-                  <button
-                    onClick={() => apagarProva(item.id)}
-                    style={styles.deleteButton}
-                  >
-                    🗑️ Apagar
-                  </button>
+                  {Object.entries(unidades).map(([unidade, subpastas]) => (
+                    <div
+                      key={unidade}
+                      style={{ marginLeft: 20, marginBottom: 12 }}
+                    >
+                      <h4>📂 {unidade}</h4>
+
+                      {Object.entries(subpastas).map(([subpasta, provas]) => (
+                        <div
+                          key={subpasta}
+                          style={{ marginLeft: 20, marginBottom: 12 }}
+                        >
+                          <h5>📂 {subpasta}</h5>
+
+                          {(provas as any[]).map((item) => {
+                            const resultado = corrigir(item.answers || {});
+
+                            return (
+                              <div key={item.id} style={styles.examBox}>
+                                <strong>📄 {item.exam_name || "Prova sem nome"}</strong>
+                                <p style={{ margin: "6px 0" }}>📅 {item.created_at}</p>
+                                <p style={{ margin: "6px 0" }}>
+                                  Nota: {resultado.nota}/{resultado.total}
+                                </p>
+                                <p style={{ margin: "6px 0" }}>
+                                  Percentual: {resultado.percentual}%
+                                </p>
+
+                                <pre style={styles.pre}>
+                                  {JSON.stringify(item.answers, null, 2)}
+                                </pre>
+
+                                <button
+                                  onClick={() => apagarProva(item.id)}
+                                  style={styles.deleteButton}
+                                >
+                                  🗑️ Apagar esta prova
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                 </div>
-
-                <div style={styles.metricsRow}>
-                  <div style={styles.metricBox}>
-                    <span style={styles.metricLabel}>Nota</span>
-                    <strong style={styles.metricValue}>
-                      {resultado.nota}/{resultado.total}
-                    </strong>
-                  </div>
-
-                  <div style={styles.metricBox}>
-                    <span style={styles.metricLabel}>Percentual</span>
-                    <strong style={styles.metricValue}>
-                      {resultado.percentual}%
-                    </strong>
-                  </div>
-                </div>
-
-                <div style={styles.answersBox}>
-                  <strong style={styles.blockTitle}>Respostas</strong>
-                  <pre style={styles.pre}>
-                    {JSON.stringify(item.answers, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          ))}
         </div>
       </section>
 
@@ -439,13 +477,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: "#6b7280",
   },
 
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-    gap: 18,
-  },
-
-  card: {
+  folderCard: {
     background: "#fff",
     borderRadius: 20,
     padding: 18,
@@ -453,78 +485,32 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: "0 8px 22px rgba(0,0,0,0.05)",
   },
 
-  cardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 16,
+  examBox: {
+    marginLeft: 20,
+    padding: 12,
+    background: "#f8fafc",
+    borderRadius: 12,
+    border: "1px solid #e5e7eb",
+    marginBottom: 8,
   },
 
-  studentName: {
-    margin: 0,
-    color: "#111827",
-    fontSize: 20,
-  },
-
-  smallText: {
-    marginTop: 6,
-    color: "#6b7280",
+  pre: {
+    background: "#eef2ff",
+    padding: 10,
+    borderRadius: 10,
+    overflowX: "auto",
     fontSize: 13,
   },
 
   deleteButton: {
-    padding: "10px 12px",
+    marginTop: 8,
+    padding: "8px 12px",
     borderRadius: 10,
     border: "none",
     background: "#ef4444",
     color: "#fff",
     cursor: "pointer",
     fontWeight: 700,
-  },
-
-  metricsRow: {
-    display: "flex",
-    gap: 12,
-    marginBottom: 16,
-  },
-
-  metricBox: {
-    flex: 1,
-    background: "#f8fafc",
-    borderRadius: 14,
-    padding: 14,
-    border: "1px solid #e5e7eb",
-  },
-
-  metricLabel: {
-    display: "block",
-    color: "#6b7280",
-    fontSize: 12,
-    marginBottom: 6,
-  },
-
-  metricValue: {
-    fontSize: 22,
-    color: "#111827",
-  },
-
-  answersBox: {
-    marginTop: 8,
-  },
-
-  blockTitle: {
-    display: "block",
-    marginBottom: 8,
-    color: "#111827",
-  },
-
-  pre: {
-    background: "#f1f5f9",
-    padding: 12,
-    borderRadius: 12,
-    overflowX: "auto",
-    fontSize: 13,
   },
 
   logsList: {
