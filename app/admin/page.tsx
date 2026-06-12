@@ -272,6 +272,9 @@ export default function AdminPage() {
                             return (
                               <div key={item.id} style={styles.examBox}>
                                 <strong>📄 {item.exam_name || "Prova sem nome"}</strong>
+                                <p style={{ margin: "6px 0" }}>📚 {item.book_name}</p>
+                                <p style={{ margin: "6px 0" }}>📂 {item.unit_folder}</p>
+                                <p style={{ margin: "6px 0" }}>📂 {item.subfolder_name}</p>
                                 <p style={{ margin: "6px 0" }}>📅 {item.created_at}</p>
                                 <p style={{ margin: "6px 0" }}>
                                   Nota: {resultado.nota}/{resultado.total}

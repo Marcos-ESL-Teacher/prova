@@ -47,18 +47,21 @@ export default function Home() {
 
   const [book, setBook] = useState(bookParam || "SBS Book 1 Plus");
 
+  // "chapter" ou "hometest"
   const [mode, setMode] = useState<"chapter" | "hometest">(
     modeParam === "hometest" ? "hometest" : "chapter"
   );
 
   const [chapter, setChapter] = useState(chapterParam || "Chapter 1");
 
+  // dentro de chapter:
   const [chapterSubfolder, setChapterSubfolder] = useState<
     "Provas" | "Exercícios Extras"
   >(
     subParam === "Exercícios Extras" ? "Exercícios Extras" : "Provas"
   );
 
+  // dentro de HomeTest:
   const [homeTestSubfolder, setHomeTestSubfolder] = useState<
     "HomeTest-Mid" | "HomeTest-Final"
   >(
@@ -134,7 +137,8 @@ export default function Home() {
     setQ2("");
   }
 
-  const usingFixedLink = !!bookParam || !!modeParam || !!chapterParam || !!subParam;
+  const usingFixedLink =
+    !!bookParam || !!modeParam || !!chapterParam || !!subParam;
 
   return (
     <div
