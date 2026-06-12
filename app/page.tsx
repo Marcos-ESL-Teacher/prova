@@ -1,16 +1,14 @@
 import ProvaClient from "./ProvaClient";
 
-type SearchParams = Promise<{
-  book?: string;
-  mode?: string;
-  chapter?: string;
-  sub?: string;
-}>;
-
 export default async function Page({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: Promise<{
+    book?: string;
+    mode?: string;
+    chapter?: string;
+    sub?: string;
+  }>;
 }) {
   const params = await searchParams;
 

@@ -77,7 +77,9 @@ export default function ProvaClient({
 
     console.log("Payload enviado:", payload);
 
-    const { error } = await supabase.from("exam_submissions").insert([payload]);
+    const { error } = await supabase
+      .from("exam_submissions")
+      .insert([payload]);
 
     if (error) {
       alert("❌ ERRO: " + error.message);
