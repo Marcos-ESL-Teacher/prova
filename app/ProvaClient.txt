@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -9,20 +8,31 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
 );
 
-export default function ProvaClient() {
-  const params = useSearchParams();
+function gerarNomeDaProva(
+  nomeAluno: string,
+  livro: string,
+  unitFolder: string,
+  subfolderName: string
+) {
+  const agora = new Date();
+  const data = agora.toLocaleDateString("pt-BR");
+  const hora = agora.toLocaleTimeString("pt-BR");
+  return `${nomeAluno || "Sem nome"} - ${livro} - ${unitFolder} - ${subfolderName} - ${data} ${hora}`;
+}
 
-  const book = params.get("book") || "SBS Book 1 Plus";
-  const mode = params.get("mode") || "chapter";
-  const chapter = params.get("chapter") || "Chapter 1";
-  const sub = params.get("sub") || "Provas";
-
+export default function ProvaClient({
+  book,
+  unitFolder,
+  subfolderName,
+}: {
+  book: string;
+  unitFolder: string;
+  subfolderName: string;
+}) {
   const [nome, setNome] = useState("");
   const [q1, setQ1] = useState("");
   const [q2, setQ2] = useState("");
   const [avisos, setAvisos] = useState(0);
-
-  const unidade = mode === "chapter" ? chapter : "HomeTest";
 
   useEffect(() => {
     function detectarTrocaAba() {
@@ -46,81 +56,145 @@ export default function ProvaClient() {
   }, [nome]);
 
   async function enviar() {
-    const agora = new Date();
+    const examName = gerarNomeDaProva(
+      nome,
+      book,
+      unitFolder,
+      subfolderName
+    );
 
-    const exam_name = `${nome} - ${book} - ${unidade} - ${sub} - ${agora.toLocaleString(
-      "pt-BR"
-    )}`;
-
-    const { error } = await supabase.from("exam_submissions").insert([
-      {
-        student_name: nome,
-        book_name: book,
-        unit_folder: unidade,
-        subfolder_name: sub,
-        exam_name,
-        answers: {
-          pergunta1: q1,
-          pergunta2: q2,
-        },
+    const payload = {
+      student_name: nome,
+      book_name: book,
+      unit_folder: unitFolder,
+      subfolder_name: subfolderName,
+      exam_name: examName,
+      answers: {
+        pergunta1: q1,
+        pergunta2: q2,
       },
-    ]);
+    };
+
+    console.log("Payload enviado:", payload);
+
+    const { error } = await supabase.from("exam_submissions").insert([payload]);
 
     if (error) {
-      alert("Erro: " + error.message);
+      alert("❌ ERRO: " + error.message);
+      console.error(error);
       return;
     }
 
-    alert("✅ Prova enviada!");
+    alert(`✅ Enviado com sucesso!\n${examName}`);
+
+    setQ1("");
+    setQ2("");
   }
 
   return (
     <div
       style={{
         minHeight: "100vh",
+        background: "linear-gradient(135deg, #3b82f6, #9333ea)",
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        background: "#0f172a",
-        color: "#fff",
+        padding: 20,
       }}
     >
       <div
         style={{
           background: "#fff",
-          color: "#000",
-          padding: 24,
-          borderRadius: 12,
+          padding: 30,
+          borderRadius: 16,
           width: "100%",
-          maxWidth: 500,
+          maxWidth: 560,
+          boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+          fontFamily: "Arial, sans-serif",
         }}
       >
-        <h1>📘 Prova</h1>
+        <h1 style={{ textAlign: "center", marginBottom: 20 }}>
+          📘 Prova Online
+        </h1>
 
-        <p>⚠️ Trocas de aba: {avisos}</p>
+        <p style={{ color: "red", textAlign: "center" }}>
+          ⚠️ Trocas de aba: {avisos}
+        </p>
 
-        <div style={{ background: "#eee", padding: 10 }}>
-          <p><b>Livro:</b> {book}</p>
-          <p><b>Chapter:</b> {unidade}</p>
-          <p><b>Tipo:</b> {sub}</p>
+        <div
+          style={{
+            background: "#f8fafc",
+            border: "1px solid #e5e7eb",
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 14,
+          }}
+        >
+          <p style={{ margin: "4px 0" }}>
+            <strong>Livro:</strong> {book}
+          </p>
+          <p style={{ margin: "4px 0" }}>
+            <strong>Pasta:</strong> {unitFolder}
+          </p>
+          <p style={{ margin: "4px 0" }}>
+            <strong>Tipo:</strong> {subfolderName}
+          </p>
         </div>
 
         <input
           placeholder="Seu nome"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
-          style={{ width: "100%", marginTop: 10 }}
+          style={inputStyle}
         />
 
-        <p>Pergunta 1</p>
-        <input value={q1} onChange={(e) => setQ1(e.target.value)} />
+        <label style={labelStyle}>Pergunta 1</label>
+        <p>Capital do Brasil?</p>
+        <input
+          value={q1}
+          onChange={(e) => setQ1(e.target.value)}
+          style={inputStyle}
+        />
 
-        <p>Pergunta 2</p>
-        <input value={q2} onChange={(e) => setQ2(e.target.value)} />
+        <label style={labelStyle}>Pergunta 2</label>
+        <p>Quanto é 2 + 2?</p>
+        <input
+          value={q2}
+          onChange={(e) => setQ2(e.target.value)}
+          style={inputStyle}
+        />
 
-        <br /><br />
-        <button onClick={enviar}>Enviar</button>
+        <button onClick={enviar} style={buttonStyle}>
+          🚀 Enviar Prova
+        </button>
       </div>
     </div>
   );
 }
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: 12,
+  marginBottom: 12,
+  borderRadius: 8,
+  border: "1px solid #ccc",
+  fontSize: 14,
+};
+
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontWeight: 700,
+  marginBottom: 6,
+  color: "#111827",
+};
+
+const buttonStyle: React.CSSProperties = {
+  width: "100%",
+  padding: 14,
+  background: "#2563eb",
+  color: "#fff",
+  border: "none",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontSize: 16,
+};

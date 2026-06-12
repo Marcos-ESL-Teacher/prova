@@ -1,10 +1,32 @@
-import { Suspense } from "react";
 import ProvaClient from "./ProvaClient";
 
-export default function Page() {
+type SearchParams = Promise<{
+  book?: string;
+  mode?: string;
+  chapter?: string;
+  sub?: string;
+}>;
+
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const params = await searchParams;
+
+  const book = params.book ?? "SBS Book 1 Plus";
+  const mode = params.mode ?? "chapter";
+  const chapter = params.chapter ?? "Chapter 1";
+  const sub = params.sub ?? "Provas";
+
+  const unitFolder = mode === "chapter" ? chapter : "HomeTest";
+  const subfolderName = sub;
+
   return (
-    <Suspense fallback={<div>Carregando prova...</div>}>
-      <ProvaClient />
-    </Suspense>
+    <ProvaClient
+      book={book}
+      unitFolder={unitFolder}
+      subfolderName={subfolderName}
+    />
   );
 }
