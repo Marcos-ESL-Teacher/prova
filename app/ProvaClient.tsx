@@ -29,6 +29,9 @@ export default function ProvaClient({
   unitFolder: string;
   subfolderName: string;
 }) {
+const [autorizado, setAutorizado] = useState(false);
+  const [senha, setSenha] = useState("");
+
   const [nome, setNome] = useState("");
   const [q1, setQ1] = useState("");
   const [q2, setQ2] = useState("");
@@ -54,7 +57,13 @@ export default function ProvaClient({
       document.removeEventListener("visibilitychange", detectarTrocaAba);
     };
   }, [nome]);
-
+function entrar() {
+  if (senha === process.env.NEXT_PUBLIC_EXAM_PASSWORD) {
+    setAutorizado(true);
+  } else {
+    alert("❌ Senha incorreta");
+  }
+}
   async function enviar() {
     const examName = gerarNomeDaProva(
       nome,
@@ -92,7 +101,45 @@ export default function ProvaClient({
     setQ1("");
     setQ2("");
   }
+if (!autorizado) {
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "linear-gradient(135deg, #3b82f6, #9333ea)",
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          padding: 30,
+          borderRadius: 16,
+          width: "90%",
+          maxWidth: 400,
+          textAlign: "center",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+        }}
+      >
+        <h2>🔒 Acesso à Prova</h2>
 
+        <input
+          type="password"
+          placeholder="Digite a senha"
+          value={senha}
+          onChange={(e) => setSenha(e.target.value)}
+          style={inputStyle}
+        />
+
+        <button onClick={entrar} style={buttonStyle}>
+          Entrar
+        </button>
+      </div>
+    </div>
+  );
+}
   return (
     <div
       style={{
