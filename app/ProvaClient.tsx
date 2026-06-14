@@ -2,7 +2,7 @@
 
 import { supabase } from "../lib/supabase"
 
-export default function ProvaClient({ book, unitFolder, subfolderName }) {
+export default function ProvaClient({ book, unitFolder, subfolderName }: any) {
   return (
     <div>
       <h1>Prova</h1>
