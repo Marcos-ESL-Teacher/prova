@@ -55,11 +55,22 @@ export default function ProvaClient() {
         }
       ])
 
-      if (!error) {
-        setLogsSuspeitos((prev) => prev + 1)
-      } else {
+      if (error) {
         console.log("ERRO AO GRAVAR LOG:", error)
+        return
       }
+
+      // Atualiza a contagem local e trava ao chegar em 3
+      setLogsSuspeitos((prev) => {
+        const novoTotal = prev + 1
+
+        if (novoTotal >= 3) {
+          setBloqueado(true)
+          setMensagem("❌ Prova bloqueada por suspeita de cola.")
+        }
+
+        return novoTotal
+      })
     } catch (err) {
       console.log("FALHA AO GRAVAR LOG:", err)
     }
@@ -138,7 +149,7 @@ export default function ProvaClient() {
     }
 
     if (bloqueado) {
-      setMensagem("Prova já enviada.")
+      setMensagem("❌ Prova bloqueada por suspeita de cola.")
       return
     }
 
@@ -245,15 +256,17 @@ export default function ProvaClient() {
 
         {logsSuspeitos > 0 && (
           <div style={{
-            background: "#fef3c7",
-            border: "1px solid #f59e0b",
-            color: "#92400e",
+            background: logsSuspeitos >= 3 ? "#fee2e2" : "#fef3c7",
+            border: logsSuspeitos >= 3 ? "1px solid #dc2626" : "1px solid #f59e0b",
+            color: logsSuspeitos >= 3 ? "#991b1b" : "#92400e",
             padding: "12px",
             borderRadius: "8px",
             marginBottom: "16px",
             fontWeight: "bold"
           }}>
-            ⚠️ Evento(s) suspeito(s) detectado(s): {logsSuspeitos}
+            {logsSuspeitos >= 3
+              ? "❌ Prova bloqueada por suspeita de cola."
+              : `⚠️ Evento(s) suspeito(s) detectado(s): ${logsSuspeitos}/3`}
           </div>
         )}
 
@@ -263,6 +276,7 @@ export default function ProvaClient() {
             value={nome}
             onChange={(e) => setNome(e.target.value)}
             style={{ width: "100%", padding: "10px" }}
+            disabled={bloqueado}
           />
         </div>
 
@@ -272,6 +286,7 @@ export default function ProvaClient() {
             value={q1}
             onChange={(e) => setQ1(e.target.value)}
             style={{ width: "100%", padding: "10px" }}
+            disabled={bloqueado}
           />
         </div>
 
@@ -281,6 +296,7 @@ export default function ProvaClient() {
             value={q2}
             onChange={(e) => setQ2(e.target.value)}
             style={{ width: "100%", padding: "10px" }}
+            disabled={bloqueado}
           />
         </div>
 
@@ -291,15 +307,15 @@ export default function ProvaClient() {
             marginTop: "20px",
             width: "100%",
             padding: "12px",
-            background: "#2563eb",
+            background: bloqueado ? "#9ca3af" : "#2563eb",
             color: "#fff",
             border: "none",
             borderRadius: "5px",
             cursor: bloqueado ? "not-allowed" : "pointer",
-            opacity: bloqueado ? 0.6 : 1
+            opacity: bloqueado ? 0.8 : 1
           }}
         >
-          {bloqueado ? "Prova já enviada" : "Enviar Prova"}
+          {bloqueado ? "Prova bloqueada por suspeita de cola" : "Enviar Prova"}
         </button>
 
         <p style={{ marginTop: "10px", textAlign: "center" }}>
