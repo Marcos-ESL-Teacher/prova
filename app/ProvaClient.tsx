@@ -1,18 +1,22 @@
 "use client"
 
-import { supabase } from "../lib/supabase"
 import { useState } from "react"
+import { supabase } from "../lib/supabase"
 
-export default function ProvaClient({ book, unitFolder, subfolderName }: any) {
+export default function ProvaClient() {
 
+  const [q1, setQ1] = useState("")
+  const [q2, setQ2] = useState("")
   const [mensagem, setMensagem] = useState("")
 
   async function enviarProva() {
     try {
       const { data, error } = await supabase
-        .from("prova") // ⚠️ depois você pode trocar pelo nome da sua tabela
+        .from("prova")
         .insert([
-          { resposta: "Teste de envio funcionando ✅" }
+          {
+            resposta: `Q1: ${q1} | Q2: ${q2}`
+          }
         ])
 
       if (error) {
@@ -32,9 +36,26 @@ export default function ProvaClient({ book, unitFolder, subfolderName }: any) {
   return (
     <div style={{ padding: "20px" }}>
       <h1>Prova</h1>
-      <p>Sistema funcionando ✅</p>
 
-      <button onClick={enviarProva}>
+      <div>
+        <p>1) Qual é 2 + 2?</p>
+        <input
+          type="text"
+          value={q1}
+          onChange={(e) => setQ1(e.target.value)}
+        />
+      </div>
+
+      <div style={{ marginTop: "10px" }}>
+        <p>2) Qual é a capital do Brasil?</p>
+        <input
+          type="text"
+          value={q2}
+          onChange={(e) => setQ2(e.target.value)}
+        />
+      </div>
+
+      <button onClick={enviarProva} style={{ marginTop: "20px" }}>
         Enviar Prova
       </button>
 
@@ -42,4 +63,3 @@ export default function ProvaClient({ book, unitFolder, subfolderName }: any) {
     </div>
   )
 }
-``
