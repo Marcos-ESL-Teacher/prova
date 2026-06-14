@@ -13,6 +13,8 @@ export default function ProvaClient() {
   const [mensagem, setMensagem] = useState("")
   const [bloqueado, setBloqueado] = useState(false)
 
+  const [logsSuspeitos, setLogsSuspeitos] = useState(0)
+
   const studentNameRef = useRef("")
 
   useEffect(() => {
@@ -53,11 +55,13 @@ export default function ProvaClient() {
         }
       ])
 
-      if (error) {
-        console.log("Erro ao registrar log:", error)
+      if (!error) {
+        setLogsSuspeitos((prev) => prev + 1)
+      } else {
+        console.log("ERRO AO GRAVAR LOG:", error)
       }
     } catch (err) {
-      console.log("Falha ao registrar log:", err)
+      console.log("FALHA AO GRAVAR LOG:", err)
     }
   }
 
@@ -222,61 +226,86 @@ export default function ProvaClient() {
 
   return (
     <div style={{
-      padding: "30px",
-      maxWidth: "550px",
-      margin: "auto",
+      minHeight: "100vh",
+      background: "linear-gradient(135deg, #eef2ff, #f8fafc)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
       fontFamily: "Arial"
     }}>
-      <h1 style={{ textAlign: "center" }}>📝 Prova</h1>
+      <div style={{
+        background: "#fff",
+        padding: "30px",
+        borderRadius: "20px",
+        width: "100%",
+        maxWidth: "550px",
+        boxShadow: "0px 10px 30px rgba(0,0,0,0.1)"
+      }}>
+        <h1 style={{ textAlign: "center", marginTop: 0 }}>📝 Prova</h1>
 
-      <div style={{ marginTop: "20px" }}>
-        <label>Nome do aluno:</label>
-        <input
-          value={nome}
-          onChange={(e) => setNome(e.target.value)}
-          style={{ width: "100%", padding: "10px" }}
-        />
+        {logsSuspeitos > 0 && (
+          <div style={{
+            background: "#fef3c7",
+            border: "1px solid #f59e0b",
+            color: "#92400e",
+            padding: "12px",
+            borderRadius: "8px",
+            marginBottom: "16px",
+            fontWeight: "bold"
+          }}>
+            ⚠️ Evento(s) suspeito(s) detectado(s): {logsSuspeitos}
+          </div>
+        )}
+
+        <div style={{ marginTop: "20px" }}>
+          <label>Nome do aluno:</label>
+          <input
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            style={{ width: "100%", padding: "10px" }}
+          />
+        </div>
+
+        <div style={{ marginTop: "20px" }}>
+          <p>1) Qual é 2 + 2?</p>
+          <input
+            value={q1}
+            onChange={(e) => setQ1(e.target.value)}
+            style={{ width: "100%", padding: "10px" }}
+          />
+        </div>
+
+        <div style={{ marginTop: "20px" }}>
+          <p>2) Qual é a capital do Brasil?</p>
+          <input
+            value={q2}
+            onChange={(e) => setQ2(e.target.value)}
+            style={{ width: "100%", padding: "10px" }}
+          />
+        </div>
+
+        <button
+          onClick={enviarProva}
+          disabled={bloqueado}
+          style={{
+            marginTop: "20px",
+            width: "100%",
+            padding: "12px",
+            background: "#2563eb",
+            color: "#fff",
+            border: "none",
+            borderRadius: "5px",
+            cursor: bloqueado ? "not-allowed" : "pointer",
+            opacity: bloqueado ? 0.6 : 1
+          }}
+        >
+          {bloqueado ? "Prova já enviada" : "Enviar Prova"}
+        </button>
+
+        <p style={{ marginTop: "10px", textAlign: "center" }}>
+          {mensagem}
+        </p>
       </div>
-
-      <div style={{ marginTop: "20px" }}>
-        <p>1) Qual é 2 + 2?</p>
-        <input
-          value={q1}
-          onChange={(e) => setQ1(e.target.value)}
-          style={{ width: "100%", padding: "10px" }}
-        />
-      </div>
-
-      <div style={{ marginTop: "20px" }}>
-        <p>2) Qual é a capital do Brasil?</p>
-        <input
-          value={q2}
-          onChange={(e) => setQ2(e.target.value)}
-          style={{ width: "100%", padding: "10px" }}
-        />
-      </div>
-
-      <button
-        onClick={enviarProva}
-        disabled={bloqueado}
-        style={{
-          marginTop: "20px",
-          width: "100%",
-          padding: "12px",
-          background: "#2563eb",
-          color: "#fff",
-          border: "none",
-          borderRadius: "5px",
-          cursor: bloqueado ? "not-allowed" : "pointer",
-          opacity: bloqueado ? 0.6 : 1
-        }}
-      >
-        {bloqueado ? "Prova já enviada" : "Enviar Prova"}
-      </button>
-
-      <p style={{ marginTop: "10px", textAlign: "center" }}>
-        {mensagem}
-      </p>
     </div>
   )
 }
