@@ -99,6 +99,24 @@ export default function AdminPage() {
     setCarregando(false);
   }
 
+  async function apagarProva(id: string) {
+    const confirmar = confirm("Deseja apagar esta prova?");
+    if (!confirmar) return;
+
+    const { error } = await supabase
+      .from("exam_submissions")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      alert("Erro ao apagar a prova: " + error.message);
+      return;
+    }
+
+    alert("✅ Prova apagada com sucesso!");
+    await carregarProvas();
+  }
+
   function sair() {
     setAutorizado(false);
     setSenha("");
@@ -314,6 +332,15 @@ export default function AdminPage() {
                             {item.answers?.pergunta2 || "-"}
                           </span>
                         </div>
+                      </div>
+
+                      <div style={styles.deleteRow}>
+                        <button
+                          onClick={() => apagarProva(item.id)}
+                          style={styles.deleteButton}
+                        >
+                          🗑️ Apagar esta prova
+                        </button>
                       </div>
                     </div>
                   );
@@ -579,6 +606,22 @@ const styles: any = {
 
   answerValue: {
     color: "#111827",
+  },
+
+  deleteRow: {
+    marginTop: "14px",
+    display: "flex",
+    justifyContent: "flex-end",
+  },
+
+  deleteButton: {
+    padding: "10px 14px",
+    background: "#dc2626",
+    color: "#fff",
+    border: "none",
+    borderRadius: "10px",
+    cursor: "pointer",
+    fontWeight: "bold",
   },
 
   center: {
