@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 
+// ✅ normalizar texto
 function normalizar(texto: string) {
   return (texto || "")
     .toLowerCase()
@@ -11,6 +12,7 @@ function normalizar(texto: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+// ✅ corrigir respostas
 function corrigir(answers: any) {
   const r1 = normalizar(answers?.pergunta1 || "");
   const r2 = normalizar(answers?.pergunta2 || "");
@@ -26,26 +28,35 @@ function corrigir(answers: any) {
   };
 }
 
+// ✅ agrupar por aluno
 function agruparPorAluno(dados: any[]) {
   const estrutura: Record<string, any[]> = {};
 
-  for (const item of dados) {
+  dados.forEach((item) => {
     const aluno = item.student_name || "Sem nome";
-    if (!estrutura[aluno]) estrutura[aluno] = [];
+
+    if (!estrutura[aluno]) {
+      estrutura[aluno] = [];
+    }
+
     estrutura[aluno].push(item);
-  }
+  });
 
   return estrutura;
 }
 
 export default function AdminPage() {
+
+  // 🔒 login
   const [senha, setSenha] = useState("");
   const [autorizado, setAutorizado] = useState(false);
   const [mensagem, setMensagem] = useState("");
 
+  // 📊 dados
   const [dados, setDados] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
 
+  // ✅ validar senha
   async function verificarSenhaProfessor() {
     setMensagem("");
 
@@ -62,7 +73,7 @@ export default function AdminPage() {
 
       if (data.ok) {
         setAutorizado(true);
-        await carregarProvas();
+        carregarProvas();
       } else {
         setMensagem(data.message || "Senha incorreta ❌");
       }
@@ -71,6 +82,7 @@ export default function AdminPage() {
     }
   }
 
+  // ✅ carregar dados
   async function carregarProvas() {
     setCarregando(true);
 
@@ -80,7 +92,7 @@ export default function AdminPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      alert("Erro ao carregar provas: " + error.message);
+      alert("Erro ao carregar: " + error.message);
       setCarregando(false);
       return;
     }
@@ -96,11 +108,15 @@ export default function AdminPage() {
     setDados([]);
   }
 
+  // 🔒 LOGIN
   if (!autorizado) {
     return (
       <div style={styles.loginWrapper}>
         <div style={styles.loginCard}>
-          <h2 style={styles.loginTitle}>🔒 Painel do Professor</h2>
+
+          <h2 style={styles.loginTitle}>
+            🔒 Painel do Professor
+          </h2>
 
           <input
             type="password"
@@ -114,7 +130,8 @@ export default function AdminPage() {
             Entrar
           </button>
 
-          <p style={styles.mensagem}>{mensagem}</p>
+          <p style={styles.msg}>{mensagem}</p>
+
         </div>
       </div>
     );
@@ -122,10 +139,14 @@ export default function AdminPage() {
 
   const estrutura = agruparPorAluno(dados);
 
+  // ✅ PAINEL
   return (
     <div style={styles.page}>
       <div style={styles.container}>
-        <h1 style={styles.header}>👨‍🏫 Painel do Professor</h1>
+
+        <h1 style={styles.header}>
+          👨‍🏫 Painel do Professor
+        </h1>
 
         <div style={styles.topButtons}>
           <button onClick={carregarProvas} style={styles.primaryButton}>
@@ -138,208 +159,201 @@ export default function AdminPage() {
         </div>
 
         {carregando && (
-          <p style={{ textAlign: "center", marginTop: 20 }}>Carregando provas...</p>
+          <p style={styles.center}>Carregando provas...</p>
         )}
 
         {!carregando && dados.length === 0 && (
-          <p style={{ textAlign: "center", marginTop: 20 }}>
-            Nenhuma prova enviada ainda.
-          </p>
+          <p style={styles.center}>Nenhuma prova enviada.</p>
         )}
 
         <div style={styles.grid}>
+
           {Object.entries(estrutura).map(([aluno, provas]) => (
+
             <div key={aluno} style={styles.alunoCard}>
-              <h2 style={styles.alunoTitulo}>📁 {aluno}</h2>
 
-              <div style={styles.provasList}>
-                {provas.map((item: any) => {
-                  const resultado = corrigir(item.answers || {});
-                  const aprovado = resultado.percentual >= 50;
+              <h2 style={styles.alunoTitulo}>
+                📁 {aluno}
+              </h2>
 
-                  return (
-                    <div key={item.id} style={styles.provaCard}>
-                      <div style={styles.infoGrid}>
-                        <p><strong>📄 Prova:</strong> {item.exam_name}</p>
-                        <p><strong>📚 Livro:</strong> {item.book_name}</p>
-                        <p><strong>📂 Pasta:</strong> {item.unit_folder}</p>
-                        <p><strong>📂 Subpasta:</strong> {item.subfolder_name}</p>
-                      </div>
+              {provas.map((item: any) => {
 
-                      <p style={styles.dataTexto}>
-                        📅 {new Date(item.created_at).toLocaleString()}
-                      </p>
+                const resultado = corrigir(item.answers);
+                const aprovado = resultado.percentual >= 50;
 
-                      <p
-                        style={{
-                          ...styles.notaTexto,
-                          color: aprovado ? "#16a34a" : "#dc2626"
-                        }}
-                      >
-                        Nota: {resultado.nota}/{resultado.total} ({resultado.percentual}%)
-                      </p>
+                return (
+                  <div key={item.id} style={styles.provaCard}>
 
-                      <div style={styles.answersBox}>
-                        <pre style={styles.answersPre}>
-                          {JSON.stringify(item.answers, null, 2)}
-                        </pre>
-                      </div>
+                    <div style={styles.infoGrid}>
+                      <p><b>📄 Prova:</b> {item.exam_name}</p>
+                      <p><b>📚 Livro:</b> {item.book_name}</p>
+                      <p><b>📂 Pasta:</b> {item.unit_folder}</p>
+                      <p><b>📂 Subpasta:</b> {item.subfolder_name}</p>
                     </div>
-                  );
-                })}
-              </div>
+
+                    <p style={styles.data}>
+                      📅 {new Date(item.created_at).toLocaleString()}
+                    </p>
+
+                    <p style={{
+                      ...styles.nota,
+                      color: aprovado ? "#16a34a" : "#dc2626"
+                    }}>
+                      Nota: {resultado.nota}/2 ({resultado.percentual}%)
+                    </p>
+
+                    <div style={styles.respostasBox}>
+                      <pre style={styles.pre}>
+                        {JSON.stringify(item.answers, null, 2)}
+                      </pre>
+                    </div>
+
+                  </div>
+                );
+
+              })}
+
             </div>
+
           ))}
+
         </div>
+
       </div>
     </div>
   );
 }
 
+// ✅ ESTILO PROFISSIONAL
 const styles: any = {
+
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(135deg, #eef2ff, #f8fafc)",
-    padding: "30px",
+    background: "linear-gradient(135deg, #eef2ff, #ffffff)",
+    padding: "40px"
   },
 
   container: {
     maxWidth: "1000px",
-    margin: "0 auto",
-    fontFamily: "Arial, sans-serif",
+    margin: "auto",
+    fontFamily: "Arial"
   },
 
   header: {
     textAlign: "center",
     fontSize: "34px",
-    marginBottom: "25px",
-    color: "#111827",
+    marginBottom: "30px"
   },
 
   topButtons: {
     display: "flex",
     justifyContent: "center",
-    gap: "12px",
-    marginBottom: "25px",
+    gap: "15px",
+    marginBottom: "30px"
   },
 
   grid: {
     display: "grid",
-    gap: "24px",
+    gap: "25px"
   },
 
   alunoCard: {
-    background: "#ffffff",
-    borderRadius: "18px",
-    padding: "22px",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+    background: "#fff",
+    borderRadius: "20px",
+    padding: "20px",
+    boxShadow: "0 10px 25px rgba(0,0,0,0.08)"
   },
 
   alunoTitulo: {
-    marginTop: 0,
-    marginBottom: "18px",
-    fontSize: "24px",
-    color: "#111827",
-  },
-
-  provasList: {
-    display: "grid",
-    gap: "16px",
+    marginBottom: "15px"
   },
 
   provaCard: {
     background: "#f8fafc",
-    borderRadius: "14px",
-    padding: "16px",
-    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    padding: "15px",
+    marginTop: "10px"
   },
 
   infoGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: "10px",
+    gap: "10px"
   },
 
-  dataTexto: {
+  data: {
     color: "#64748b",
-    marginTop: "12px",
-    marginBottom: "8px",
+    marginTop: "10px"
   },
 
-  notaTexto: {
+  nota: {
     fontWeight: "bold",
-    marginTop: "6px",
-    marginBottom: "12px",
+    marginTop: "10px"
   },
 
-  answersBox: {
+  respostasBox: {
+    marginTop: "10px",
     background: "#e0e7ff",
-    borderRadius: "10px",
-    padding: "12px",
+    padding: "10px",
+    borderRadius: "8px"
   },
 
-  answersPre: {
-    margin: 0,
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-word",
-    fontSize: "14px",
+  pre: {
+    margin: 0
+  },
+
+  center: {
+    textAlign: "center",
+    marginTop: "20px"
   },
 
   loginWrapper: {
     minHeight: "100vh",
     display: "flex",
     justifyContent: "center",
-    alignItems: "center",
-    background: "linear-gradient(135deg, #eef2ff, #f8fafc)",
-    fontFamily: "Arial, sans-serif",
+    alignItems: "center"
   },
 
   loginCard: {
-    background: "#ffffff",
+    background: "#fff",
     padding: "30px",
-    borderRadius: "16px",
-    width: "100%",
-    maxWidth: "360px",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+    borderRadius: "15px",
+    width: "320px",
+    boxShadow: "0 10px 25px rgba(0,0,0,0.1)"
   },
 
   loginTitle: {
-    textAlign: "center",
-    marginTop: 0,
-    marginBottom: "18px",
+    textAlign: "center"
   },
 
   input: {
     width: "100%",
-    padding: "12px",
-    borderRadius: "8px",
-    border: "1px solid #d1d5db",
-    fontSize: "15px",
+    padding: "10px",
+    marginTop: "10px",
+    borderRadius: "8px"
   },
 
   primaryButton: {
-    padding: "12px 16px",
+    marginTop: "10px",
+    padding: "10px",
     background: "#2563eb",
     color: "#fff",
     border: "none",
     borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "bold",
+    cursor: "pointer"
   },
 
   logoutButton: {
-    padding: "12px 16px",
+    padding: "10px",
     background: "#111827",
     color: "#fff",
     border: "none",
     borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "bold",
+    cursor: "pointer"
   },
 
-  mensagem: {
-    marginTop: "12px",
-    textAlign: "center",
-    fontWeight: "bold",
-  },
+  msg: {
+    marginTop: "10px",
+    textAlign: "center"
+  }
 };
