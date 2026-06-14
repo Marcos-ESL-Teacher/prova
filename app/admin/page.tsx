@@ -12,8 +12,8 @@ function normalizar(texto: string) {
 }
 
 function corrigir(answers: any) {
-  const r1 = normalizar(answers?.pergunta1 || answers?.q1 || "");
-  const r2 = normalizar(answers?.pergunta2 || answers?.q2 || "");
+  const r1 = normalizar(answers?.pergunta1 || "");
+  const r2 = normalizar(answers?.pergunta2 || "");
 
   const acertos =
     (r1 === "4" || r1 === "quatro" ? 1 : 0) +
@@ -104,7 +104,7 @@ export default function AdminPage() {
             Entrar
           </button>
 
-          <p>{mensagem}</p>
+          <p style={{ textAlign: "center", marginTop: 10 }}>{mensagem}</p>
         </div>
       </div>
     );
@@ -113,11 +113,12 @@ export default function AdminPage() {
   // ✅ PAINEL
   return (
     <div style={styles.page}>
+
       <div style={styles.container}>
 
-        <h1>👨‍🏫 Painel do Professor</h1>
+        <h1 style={styles.title}>👨‍🏫 Painel do Professor</h1>
 
-        <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+        <div style={styles.topButtons}>
           <button onClick={carregarProvas} style={styles.button}>
             🔄 Atualizar
           </button>
@@ -127,10 +128,10 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {carregando && <p>Carregando...</p>}
+        {carregando && <p style={{ textAlign: "center" }}>Carregando...</p>}
 
         {dados.length === 0 && !carregando && (
-          <p>Nenhuma prova enviada.</p>
+          <p style={{ textAlign: "center" }}>Nenhuma prova enviada.</p>
         )}
 
         <div style={styles.grid}>
@@ -144,25 +145,29 @@ export default function AdminPage() {
 
                 <h2>📁 {item.student_name}</h2>
 
-                <p><strong>📚 Livro:</strong> {item.book_name}</p>
-                <p><strong>📂 Pasta:</strong> {item.unit_folder}</p>
-                <p><strong>📂 Subpasta:</strong> {item.subfolder_name}</p>
-                <p><strong>📄 Prova:</strong> {item.exam_name}</p>
+                <div style={styles.infoGrid}>
+                  <p><strong>📚 Livro:</strong> {item.book_name}</p>
+                  <p><strong>📂 Pasta:</strong> {item.unit_folder}</p>
+                  <p><strong>📂 Subpasta:</strong> {item.subfolder_name}</p>
+                  <p><strong>📄 Prova:</strong> {item.exam_name}</p>
+                </div>
 
-                <p style={{ color: "#64748b" }}>
+                <p style={styles.date}>
                   📅 {new Date(item.created_at).toLocaleString()}
                 </p>
 
                 <p style={{
                   fontWeight: "bold",
-                  color: aprovado ? "green" : "red"
+                  color: aprovado ? "#16a34a" : "#dc2626"
                 }}>
                   Nota: {resultado.nota}/{resultado.total} ({resultado.percentual}%)
                 </p>
 
-                <pre style={styles.answers}>
-                  {JSON.stringify(item.answers, null, 2)}
-                </pre>
+                <div style={styles.answers}>
+                  <pre style={{ margin: 0 }}>
+                    {JSON.stringify(item.answers, null, 2)}
+                  </pre>
+                </div>
 
               </div>
             );
@@ -176,57 +181,98 @@ export default function AdminPage() {
 }
 
 const styles: any = {
+
   page: {
     minHeight: "100vh",
-    background: "#f8fafc",
+    background: "linear-gradient(135deg, #eef2ff, #f8fafc)",
     padding: "30px"
   },
+
   container: {
-    maxWidth: "900px",
+    maxWidth: "950px",
     margin: "auto"
   },
+
+  title: {
+    textAlign: "center",
+    marginBottom: "20px"
+  },
+
+  topButtons: {
+    display: "flex",
+    justifyContent: "center",
+    gap: "10px",
+    marginBottom: "20px"
+  },
+
   grid: {
     display: "grid",
     gap: "20px"
   },
+
   card: {
     background: "#fff",
     padding: "20px",
-    borderRadius: "12px",
-    boxShadow: "0 5px 15px rgba(0,0,0,0.1)"
+    borderRadius: "14px",
+    boxShadow: "0 10px 25px rgba(0,0,0,0.1)"
   },
+
+  infoGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "10px",
+    marginTop: "10px"
+  },
+
+  date: {
+    color: "#64748b",
+    marginTop: "10px"
+  },
+
   answers: {
+    marginTop: "15px",
     background: "#eef2ff",
-    padding: "10px",
-    borderRadius: "8px"
+    padding: "12px",
+    borderRadius: "10px"
   },
+
   loginWrapper: {
     minHeight: "100vh",
     display: "flex",
     justifyContent: "center",
     alignItems: "center"
   },
+
   loginCard: {
     background: "#fff",
     padding: "30px",
-    borderRadius: "10px"
+    borderRadius: "12px",
+    width: "300px",
+    boxShadow: "0 5px 20px rgba(0,0,0,0.1)"
   },
+
   input: {
     width: "100%",
     padding: "10px",
-    marginTop: "10px"
-  },
-  button: {
     marginTop: "10px",
+    borderRadius: "6px"
+  },
+
+  button: {
     padding: "10px",
     background: "#2563eb",
     color: "#fff",
-    border: "none"
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer"
   },
+
   logout: {
     padding: "10px",
     background: "#111827",
     color: "#fff",
-    border: "none"
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer"
   }
-};
+}
