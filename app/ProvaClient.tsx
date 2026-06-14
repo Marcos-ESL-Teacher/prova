@@ -25,6 +25,8 @@ export default function ProvaClient() {
       } else {
         console.log("SUCESSO:", data)
         setMensagem("Prova enviada com sucesso ✅")
+        setQ1("")
+        setQ2("")
       }
 
     } catch (err) {
@@ -43,15 +45,17 @@ export default function ProvaClient() {
           type="text"
           value={q1}
           onChange={(e) => setQ1(e.target.value)}
+          placeholder="Digite sua resposta"
         />
       </div>
 
-      <div style={{ marginTop: "10px" }}>
+      <div style={{ marginTop: "15px" }}>
         <p>2) Qual é a capital do Brasil?</p>
         <input
           type="text"
           value={q2}
           onChange={(e) => setQ2(e.target.value)}
+          placeholder="Digite sua resposta"
         />
       </div>
 
@@ -59,7 +63,7 @@ export default function ProvaClient() {
         Enviar Prova
       </button>
 
-      <p>{mensagem}</p>
+      <p style={{ marginTop: "10px" }}>{mensagem}</p>
     </div>
   )
 }
