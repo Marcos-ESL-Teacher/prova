@@ -1,16 +1,12 @@
 "use client"
 
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from "../lib/supabase"
 
-// pegar variáveis com segurança
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || ""
-
-// mostrar no console (teste)
-console.log("URL:", supabaseUrl)
-console.log("KEY:", supabaseKey)
-
-// criar cliente
-const supabase = createClient(supabaseUrl, supabaseKey)
-
-export default supabase
+export default function ProvaClient(props) {
+  return (
+    <div>
+      <h1>Prova</h1>
+      <p>Se o Supabase estiver funcionando, o erro vai sumir.</p>
+    </div>
+  )
+}
