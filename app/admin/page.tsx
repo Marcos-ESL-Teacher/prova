@@ -34,11 +34,7 @@ function agruparPorAluno(dados: any[]) {
 
   dados.forEach((item) => {
     const aluno = item.student_name || "Sem nome";
-
-    if (!estrutura[aluno]) {
-      estrutura[aluno] = [];
-    }
-
+    if (!estrutura[aluno]) estrutura[aluno] = [];
     estrutura[aluno].push(item);
   });
 
@@ -56,7 +52,6 @@ export default function AdminPage() {
   const [dados, setDados] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
 
-  // ✅ validar senha
   async function verificarSenhaProfessor() {
     setMensagem("");
 
@@ -82,7 +77,6 @@ export default function AdminPage() {
     }
   }
 
-  // ✅ carregar dados
   async function carregarProvas() {
     setCarregando(true);
 
@@ -92,7 +86,7 @@ export default function AdminPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      alert("Erro ao carregar: " + error.message);
+      alert("Erro: " + error.message);
       setCarregando(false);
       return;
     }
@@ -113,25 +107,21 @@ export default function AdminPage() {
     return (
       <div style={styles.loginWrapper}>
         <div style={styles.loginCard}>
-
-          <h2 style={styles.loginTitle}>
-            🔒 Painel do Professor
-          </h2>
+          <h2>🔒 Painel do Professor</h2>
 
           <input
             type="password"
-            placeholder="Senha do professor"
+            placeholder="Senha"
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
             style={styles.input}
           />
 
-          <button onClick={verificarSenhaProfessor} style={styles.primaryButton}>
+          <button onClick={verificarSenhaProfessor} style={styles.button}>
             Entrar
           </button>
 
-          <p style={styles.msg}>{mensagem}</p>
-
+          <p>{mensagem}</p>
         </div>
       </div>
     );
@@ -144,68 +134,63 @@ export default function AdminPage() {
     <div style={styles.page}>
       <div style={styles.container}>
 
-        <h1 style={styles.header}>
-          👨‍🏫 Painel do Professor
-        </h1>
+        <h1 style={styles.header}>👨‍🏫 Painel do Professor</h1>
 
-        <div style={styles.topButtons}>
-          <button onClick={carregarProvas} style={styles.primaryButton}>
+        <div style={styles.top}>
+          <button onClick={carregarProvas} style={styles.button}>
             🔄 Atualizar
           </button>
 
-          <button onClick={sair} style={styles.logoutButton}>
+          <button onClick={sair} style={styles.logout}>
             Sair
           </button>
         </div>
 
-        {carregando && (
-          <p style={styles.center}>Carregando provas...</p>
-        )}
+        {carregando && <p style={styles.center}>Carregando...</p>}
 
         {!carregando && dados.length === 0 && (
-          <p style={styles.center}>Nenhuma prova enviada.</p>
+          <p style={styles.center}>Nenhuma prova encontrada</p>
         )}
 
         <div style={styles.grid}>
 
           {Object.entries(estrutura).map(([aluno, provas]) => (
+            <div key={aluno} style={styles.cardAluno}>
 
-            <div key={aluno} style={styles.alunoCard}>
-
-              <h2 style={styles.alunoTitulo}>
-                📁 {aluno}
-              </h2>
+              <h2>📁 {aluno}</h2>
 
               {provas.map((item: any) => {
 
-                const resultado = corrigir(item.answers);
-                const aprovado = resultado.percentual >= 50;
+                const r = corrigir(item.answers);
+                const aprovado = r.percentual >= 50;
 
                 return (
-                  <div key={item.id} style={styles.provaCard}>
+                  <div key={item.id} style={styles.cardProva}>
 
-                    <div style={styles.infoGrid}>
-                      <p><b>📄 Prova:</b> {item.exam_name}</p>
-                      <p><b>📚 Livro:</b> {item.book_name}</p>
-                      <p><b>📂 Pasta:</b> {item.unit_folder}</p>
-                      <p><b>📂 Subpasta:</b> {item.subfolder_name}</p>
+                    <div style={styles.headerProva}>
+                      <h3>📄 {item.exam_name}</h3>
+                      <span style={{
+                        ...styles.badge,
+                        background: aprovado ? "#16a34a" : "#dc2626"
+                      }}>
+                        {r.percentual}%
+                      </span>
                     </div>
 
-                    <p style={styles.data}>
+                    <div style={styles.infoGrid}>
+                      <span>📚 {item.book_name}</span>
+                      <span>📂 {item.unit_folder}</span>
+                      <span>📂 {item.subfolder_name}</span>
+                    </div>
+
+                    <div style={styles.data}>
                       📅 {new Date(item.created_at).toLocaleString()}
-                    </p>
+                    </div>
 
-                    <p style={{
-                      ...styles.nota,
-                      color: aprovado ? "#16a34a" : "#dc2626"
-                    }}>
-                      Nota: {resultado.nota}/2 ({resultado.percentual}%)
-                    </p>
-
-                    <div style={styles.respostasBox}>
-                      <pre style={styles.pre}>
-                        {JSON.stringify(item.answers, null, 2)}
-                      </pre>
+                    <div style={styles.respostas}>
+                      <b>Respostas:</b><br/>
+                      1: {item.answers?.pergunta1 || "-"}<br/>
+                      2: {item.answers?.pergunta2 || "-"}
                     </div>
 
                   </div>
@@ -214,7 +199,6 @@ export default function AdminPage() {
               })}
 
             </div>
-
           ))}
 
         </div>
@@ -224,12 +208,12 @@ export default function AdminPage() {
   );
 }
 
-// ✅ ESTILO PROFISSIONAL
+// 🎨 ESTILO PROFISSIONAL
 const styles: any = {
 
   page: {
-    minHeight: "100vh",
     background: "linear-gradient(135deg, #eef2ff, #ffffff)",
+    minHeight: "100vh",
     padding: "40px"
   },
 
@@ -241,15 +225,14 @@ const styles: any = {
 
   header: {
     textAlign: "center",
-    fontSize: "34px",
     marginBottom: "30px"
   },
 
-  topButtons: {
+  top: {
     display: "flex",
     justifyContent: "center",
-    gap: "15px",
-    marginBottom: "30px"
+    gap: "10px",
+    marginBottom: "25px"
   },
 
   grid: {
@@ -257,28 +240,38 @@ const styles: any = {
     gap: "25px"
   },
 
-  alunoCard: {
+  cardAluno: {
     background: "#fff",
-    borderRadius: "20px",
     padding: "20px",
-    boxShadow: "0 10px 25px rgba(0,0,0,0.08)"
+    borderRadius: "16px",
+    boxShadow: "0 10px 25px rgba(0,0,0,0.1)"
   },
 
-  alunoTitulo: {
-    marginBottom: "15px"
-  },
-
-  provaCard: {
+  cardProva: {
     background: "#f8fafc",
-    borderRadius: "12px",
     padding: "15px",
+    borderRadius: "12px",
     marginTop: "10px"
+  },
+
+  headerProva: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+
+  badge: {
+    color: "#fff",
+    padding: "5px 10px",
+    borderRadius: "8px",
+    fontWeight: "bold"
   },
 
   infoGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: "10px"
+    gap: "6px",
+    marginTop: "10px"
   },
 
   data: {
@@ -286,74 +279,51 @@ const styles: any = {
     marginTop: "10px"
   },
 
-  nota: {
-    fontWeight: "bold",
-    marginTop: "10px"
-  },
-
-  respostasBox: {
+  respostas: {
     marginTop: "10px",
     background: "#e0e7ff",
     padding: "10px",
     borderRadius: "8px"
   },
 
-  pre: {
-    margin: 0
-  },
-
   center: {
-    textAlign: "center",
-    marginTop: "20px"
+    textAlign: "center"
   },
 
   loginWrapper: {
-    minHeight: "100vh",
     display: "flex",
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
+    height: "100vh"
   },
 
   loginCard: {
     background: "#fff",
     padding: "30px",
-    borderRadius: "15px",
-    width: "320px",
-    boxShadow: "0 10px 25px rgba(0,0,0,0.1)"
-  },
-
-  loginTitle: {
-    textAlign: "center"
+    borderRadius: "12px"
   },
 
   input: {
     width: "100%",
     padding: "10px",
-    marginTop: "10px",
-    borderRadius: "8px"
+    marginTop: "10px"
   },
 
-  primaryButton: {
-    marginTop: "10px",
+  button: {
     padding: "10px",
     background: "#2563eb",
     color: "#fff",
     border: "none",
-    borderRadius: "8px",
+    borderRadius: "6px",
     cursor: "pointer"
   },
 
-  logoutButton: {
+  logout: {
     padding: "10px",
     background: "#111827",
     color: "#fff",
     border: "none",
-    borderRadius: "8px",
-    cursor: "pointer"
-  },
-
-  msg: {
-    marginTop: "10px",
-    textAlign: "center"
+    borderRadius: "6px"
   }
+
 };
