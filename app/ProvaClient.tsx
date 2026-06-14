@@ -4,14 +4,15 @@ import { useState } from "react"
 import { supabase } from "../lib/supabase"
 
 export default function ProvaClient() {
-  const [studentName, setStudentName] = useState("")
+
+  const [nome, setNome] = useState("")
   const [q1, setQ1] = useState("")
   const [q2, setQ2] = useState("")
   const [mensagem, setMensagem] = useState("")
 
   async function enviarProva() {
-    if (!studentName.trim()) {
-      setMensagem("Digite o nome do aluno!")
+    if (!nome.trim()) {
+      setMensagem("Digite seu nome!")
       return
     }
 
@@ -20,11 +21,11 @@ export default function ProvaClient() {
         .from("exam_submissions")
         .insert([
           {
-            student_name: studentName,
-            book_name: "Livro de Teste",
-            unit_folder: "Unidade 1",
-            subfolder_name: "Subpasta A",
-            exam_name: "Prova 2 Questões",
+            student_name: nome,
+            book_name: "Livro 1",
+            unit_folder: "Unit 1",
+            subfolder_name: "Test 1",
+            exam_name: "Prova Simples",
             answers: {
               pergunta1: q1,
               pergunta2: q2
@@ -36,67 +37,108 @@ export default function ProvaClient() {
         console.log("ERRO:", error)
         setMensagem("Erro ao enviar!")
       } else {
-        setMensagem("Prova enviada com sucesso ✅")
-        setStudentName("")
+        setMensagem("✅ Prova enviada com sucesso!")
+        setNome("")
         setQ1("")
         setQ2("")
       }
+
     } catch (err) {
-      console.log("FALHA:", err)
+      console.log(err)
       setMensagem("Falha geral!")
     }
   }
 
   return (
-    <div style={{ padding: "30px", maxWidth: "600px", margin: "0 auto", fontFamily: "Arial" }}>
-      <h1>Prova</h1>
+    <div style={{
+      minHeight: "100vh",
+      background: "linear-gradient(135deg, #eef2ff, #f8fafc)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      fontFamily: "Arial"
+    }}>
 
-      <div style={{ marginBottom: "18px" }}>
-        <label><strong>Nome do aluno:</strong></label>
-        <input
-          type="text"
-          value={studentName}
-          onChange={(e) => setStudentName(e.target.value)}
-          style={{ width: "100%", padding: "10px", marginTop: "6px" }}
-        />
-      </div>
+      <div style={{
+        background: "#fff",
+        padding: "30px",
+        borderRadius: "20px",
+        width: "100%",
+        maxWidth: "500px",
+        boxShadow: "0px 10px 30px rgba(0,0,0,0.1)"
+      }}>
 
-      <div style={{ marginBottom: "18px" }}>
-        <p><strong>1) Qual é 2 + 2?</strong></p>
-        <input
-          type="text"
-          value={q1}
-          onChange={(e) => setQ1(e.target.value)}
-          style={{ width: "100%", padding: "10px" }}
-        />
-      </div>
+        <h1 style={{ textAlign: "center" }}>📝 Prova</h1>
 
-      <div style={{ marginBottom: "18px" }}>
-        <p><strong>2) Qual é a capital do Brasil?</strong></p>
-        <input
-          type="text"
-          value={q2}
-          onChange={(e) => setQ2(e.target.value)}
-          style={{ width: "100%", padding: "10px" }}
-        />
-      </div>
+        {/* Nome */}
+        <div style={{ marginTop: "20px" }}>
+          <label><strong>Nome do aluno:</strong></label>
+          <input
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            style={input}
+          />
+        </div>
 
-      <button
-        onClick={enviarProva}
-        style={{
-          padding: "12px 16px",
-          background: "#2563eb",
-          color: "#fff",
-          border: "none",
-          borderRadius: "8px",
-          cursor: "pointer",
+        {/* Pergunta 1 */}
+        <div style={boxPergunta}>
+          <p>1) Qual é 2 + 2?</p>
+          <input
+            value={q1}
+            onChange={(e) => setQ1(e.target.value)}
+            style={input}
+          />
+        </div>
+
+        {/* Pergunta 2 */}
+        <div style={boxPergunta}>
+          <p>2) Qual é a capital do Brasil?</p>
+          <input
+            value={q2}
+            onChange={(e) => setQ2(e.target.value)}
+            style={input}
+          />
+        </div>
+
+        {/* Botão */}
+        <button onClick={enviarProva} style={botao}>
+          Enviar Prova
+        </button>
+
+        <p style={{
+          marginTop: "15px",
+          textAlign: "center",
           fontWeight: "bold"
-        }}
-      >
-        Enviar Prova
-      </button>
+        }}>
+          {mensagem}
+        </p>
 
-      <p style={{ marginTop: "14px", fontWeight: "bold" }}>{mensagem}</p>
+      </div>
     </div>
   )
+}
+
+const input = {
+  width: "100%",
+  padding: "10px",
+  borderRadius: "8px",
+  border: "1px solid #ccc",
+  marginTop: "5px"
+}
+
+const boxPergunta = {
+  marginTop: "20px"
+}
+
+const botao = {
+  marginTop: "25px",
+  width: "100%",
+  padding: "12px",
+  background: "#2563eb",
+  color: "#fff",
+  border: "none",
+  borderRadius: "8px",
+  fontWeight: "bold",
+  cursor: "pointer",
+  fontSize: "16px"
 }
