@@ -5,13 +5,35 @@ import { supabase } from "../../lib/supabase";
 
 export default function AdminPage() {
 
+  const [senha, setSenha] = useState("");
+  const [autorizado, setAutorizado] = useState(false);
+  const [mensagem, setMensagem] = useState("");
+
   const [dados, setDados] = useState<any[]>([]);
-  const [logs, setLogs] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
 
-  async function carregarTudo() {
-    await Promise.all([carregarProvas(), carregarLogs()]);
-    setCarregando(false);
+  async function verificarSenhaProfessor() {
+    try {
+      const res = await fetch("/api/verify-admin-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ password: senha })
+      });
+
+      const data = await res.json();
+
+      if (data.ok) {
+        setAutorizado(true)
+        carregarProvas()
+      } else {
+        setMensagem("Senha incorreta ❌")
+      }
+
+    } catch {
+      setMensagem("Erro ao validar senha")
+    }
   }
 
   async function carregarProvas() {
@@ -26,25 +48,67 @@ export default function AdminPage() {
     }
 
     setDados(data || []);
-  }
-
-  // ✅ CORREÇÃO AQUI (sem erro)
-  async function carregarLogs() {
-    setLogs([]); // desativado por enquanto
+    setCarregando(false);
   }
 
   useEffect(() => {
-    carregarTudo();
+    setCarregando(false)
   }, []);
 
-  if (carregando) {
+  // 🔒 BLOQUEIO REAL
+  if (!autorizado) {
     return (
-      <div style={{ padding: 20 }}>
-        <h2>Carregando painel...</h2>
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "#f3f4f6",
+        fontFamily: "Arial"
+      }}>
+        <div style={{
+          background: "#fff",
+          padding: "30px",
+          borderRadius: "15px",
+          width: "100%",
+          maxWidth: "350px",
+          boxShadow: "0 5px 20px rgba(0,0,0,0.1)"
+        }}>
+          <h2 style={{ textAlign: "center" }}>🔒 Painel do Professor</h2>
+
+          <input
+            type="password"
+            placeholder="Digite a senha"
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+            style={{ width: "100%", padding: "10px", marginTop: "10px" }}
+          />
+
+          <button
+            onClick={verificarSenhaProfessor}
+            style={{
+              marginTop: "15px",
+              width: "100%",
+              padding: "10px",
+              background: "#2563eb",
+              color: "#fff",
+              border: "none",
+              borderRadius: "5px",
+              cursor: "pointer"
+            }}
+          >
+            Entrar
+          </button>
+
+          <p style={{ marginTop: "10px", textAlign: "center" }}>
+            {mensagem}
+          </p>
+        </div>
       </div>
-    );
+    )
   }
 
+  // ✅ PAINEL (SÓ APARECE DEPOIS DA SENHA)
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       <h1>Painel do Professor</h1>
@@ -73,9 +137,9 @@ export default function AdminPage() {
           }}>
             {JSON.stringify(item.answers, null, 2)}
           </pre>
-
         </div>
       ))}
+
     </div>
   );
 }
