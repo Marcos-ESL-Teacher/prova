@@ -5,17 +5,23 @@ import { supabase } from "../lib/supabase"
 
 export default function ProvaClient() {
 
+  const [nome, setNome] = useState("")
   const [q1, setQ1] = useState("")
   const [q2, setQ2] = useState("")
   const [mensagem, setMensagem] = useState("")
 
   async function enviarProva() {
+    if (!nome) {
+      setMensagem("Digite seu nome!")
+      return
+    }
+
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("prova")
         .insert([
           {
-            resposta: `Q1: ${q1} | Q2: ${q2}`
+            resposta: `Aluno: ${nome} | Q1: ${q1} | Q2: ${q2}`
           }
         ])
 
@@ -23,8 +29,8 @@ export default function ProvaClient() {
         console.log("ERRO:", error)
         setMensagem("Erro ao enviar!")
       } else {
-        console.log("SUCESSO:", data)
         setMensagem("Prova enviada com sucesso ✅")
+        setNome("")
         setQ1("")
         setQ2("")
       }
@@ -36,34 +42,75 @@ export default function ProvaClient() {
   }
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h1>Prova</h1>
+    <div style={{
+      padding: "30px",
+      maxWidth: "500px",
+      margin: "auto",
+      fontFamily: "Arial"
+    }}>
 
-      <div>
+      <h1 style={{ textAlign: "center" }}>Prova</h1>
+
+      {/* Nome do aluno */}
+      <div style={{ marginTop: "20px" }}>
+        <label>Nome do aluno:</label>
+        <input
+          type="text"
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+          style={{ width: "100%", padding: "8px", marginTop: "5px" }}
+        />
+      </div>
+
+      {/* Pergunta 1 */}
+      <div style={{ marginTop: "20px" }}>
         <p>1) Qual é 2 + 2?</p>
         <input
           type="text"
           value={q1}
           onChange={(e) => setQ1(e.target.value)}
-          placeholder="Digite sua resposta"
+          style={{ width: "100%", padding: "8px" }}
         />
       </div>
 
-      <div style={{ marginTop: "15px" }}>
+      {/* Pergunta 2 */}
+      <div style={{ marginTop: "20px" }}>
         <p>2) Qual é a capital do Brasil?</p>
         <input
           type="text"
           value={q2}
           onChange={(e) => setQ2(e.target.value)}
-          placeholder="Digite sua resposta"
+          style={{ width: "100%", padding: "8px" }}
         />
       </div>
 
-      <button onClick={enviarProva} style={{ marginTop: "20px" }}>
+      {/* Botão */}
+      <button
+        onClick={enviarProva}
+        style={{
+          marginTop: "30px",
+          width: "100%",
+          padding: "12px",
+          backgroundColor: "#0070f3",
+          color: "white",
+          border: "none",
+          borderRadius: "5px",
+          fontSize: "16px",
+          cursor: "pointer"
+        }}
+      >
         Enviar Prova
       </button>
 
-      <p style={{ marginTop: "10px" }}>{mensagem}</p>
+      {/* Mensagem */}
+      <p style={{
+        marginTop: "15px",
+        textAlign: "center",
+        fontWeight: "bold"
+      }}>
+        {mensagem}
+      </p>
+
     </div>
   )
 }
