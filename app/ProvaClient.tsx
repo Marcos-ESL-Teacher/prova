@@ -1,14 +1,16 @@
+"use client"
+
 import { createClient } from '@supabase/supabase-js'
 
-// pegando variáveis de ambiente
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+// pegar variáveis com segurança
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || ""
 
-// 🔥 TESTE IMPORTANTE (NÃO APAGUE AINDA)
+// mostrar no console (teste)
 console.log("URL:", supabaseUrl)
 console.log("KEY:", supabaseKey)
 
-// criando cliente
+// criar cliente
 const supabase = createClient(supabaseUrl, supabaseKey)
 
 export default supabase
