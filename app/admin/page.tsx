@@ -26,6 +26,22 @@ function corrigir(answers: any) {
   };
 }
 
+function agrupar(dados: any[]) {
+  const estrutura: any = {};
+
+  dados.forEach((item) => {
+    const aluno = item.student_name || "Sem nome";
+
+    if (!estrutura[aluno]) {
+      estrutura[aluno] = [];
+    }
+
+    estrutura[aluno].push(item);
+  });
+
+  return estrutura;
+}
+
 export default function AdminPage() {
 
   const [senha, setSenha] = useState("");
@@ -36,43 +52,31 @@ export default function AdminPage() {
   const [carregando, setCarregando] = useState(false);
 
   async function verificarSenhaProfessor() {
-    setMensagem("");
+    const res = await fetch("/api/verify-admin-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ password: senha })
+    });
 
-    try {
-      const res = await fetch("/api/verify-admin-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ password: senha })
-      });
+    const data = await res.json();
 
-      const data = await res.json();
-
-      if (data.ok) {
-        setAutorizado(true);
-        carregarProvas();
-      } else {
-        setMensagem(data.message || "Senha incorreta ❌");
-      }
-    } catch {
-      setMensagem("Erro ao validar senha.");
+    if (data.ok) {
+      setAutorizado(true);
+      carregar();
+    } else {
+      setMensagem("Senha incorreta ❌");
     }
   }
 
-  async function carregarProvas() {
+  async function carregar() {
     setCarregando(true);
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("exam_submissions")
       .select("*")
       .order("created_at", { ascending: false });
-
-    if (error) {
-      alert("Erro ao carregar: " + error.message);
-      setCarregando(false);
-      return;
-    }
 
     setDados(data || []);
     setCarregando(false);
@@ -81,7 +85,6 @@ export default function AdminPage() {
   function sair() {
     setAutorizado(false);
     setSenha("");
-    setMensagem("");
     setDados([]);
   }
 
@@ -94,86 +97,78 @@ export default function AdminPage() {
 
           <input
             type="password"
-            placeholder="Senha do professor"
+            placeholder="Senha"
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
             style={styles.input}
           />
 
-          <button onClick={verificarSenhaProfessor} style={styles.button}>
+          <button onClick={verificarSenhaProfessor} style={styles.btn}>
             Entrar
           </button>
 
-          <p style={{ textAlign: "center", marginTop: 10 }}>{mensagem}</p>
+          <p>{mensagem}</p>
         </div>
       </div>
     );
   }
 
-  // ✅ PAINEL
+  const estrutura = agrupar(dados);
+
   return (
     <div style={styles.page}>
 
       <div style={styles.container}>
 
-        <h1 style={styles.title}>👨‍🏫 Painel do Professor</h1>
+        <h1 style={{ textAlign: "center" }}>👨‍🏫 Painel do Professor</h1>
 
-        <div style={styles.topButtons}>
-          <button onClick={carregarProvas} style={styles.button}>
+        <div style={styles.top}>
+          <button onClick={carregar} style={styles.btn}>
             🔄 Atualizar
           </button>
-
           <button onClick={sair} style={styles.logout}>
             Sair
           </button>
         </div>
 
-        {carregando && <p style={{ textAlign: "center" }}>Carregando...</p>}
+        {Object.entries(estrutura).map(([aluno, provas]: any) => (
+          <div key={aluno} style={styles.cardAluno}>
 
-        {dados.length === 0 && !carregando && (
-          <p style={{ textAlign: "center" }}>Nenhuma prova enviada.</p>
-        )}
+            <h2>📁 {aluno}</h2>
 
-        <div style={styles.grid}>
+            {provas.map((item: any) => {
+              const r = corrigir(item.answers);
+              const ok = r.percentual >= 50;
 
-          {dados.map((item) => {
-            const resultado = corrigir(item.answers || {});
-            const aprovado = resultado.percentual >= 50;
+              return (
+                <div key={item.id} style={styles.cardProva}>
 
-            return (
-              <div key={item.id} style={styles.card}>
+                  <p><b>📄 {item.exam_name}</b></p>
+                  <p>📚 {item.book_name}</p>
+                  <p>📂 {item.unit_folder}</p>
+                  <p>📂 {item.subfolder_name}</p>
 
-                <h2>📁 {item.student_name}</h2>
+                  <p style={{ color: "#64748b" }}>
+                    {new Date(item.created_at).toLocaleString()}
+                  </p>
 
-                <div style={styles.infoGrid}>
-                  <p><strong>📚 Livro:</strong> {item.book_name}</p>
-                  <p><strong>📂 Pasta:</strong> {item.unit_folder}</p>
-                  <p><strong>📂 Subpasta:</strong> {item.subfolder_name}</p>
-                  <p><strong>📄 Prova:</strong> {item.exam_name}</p>
-                </div>
+                  <p style={{
+                    color: ok ? "green" : "red",
+                    fontWeight: "bold"
+                  }}>
+                    Nota: {r.nota}/2 ({r.percentual}%)
+                  </p>
 
-                <p style={styles.date}>
-                  📅 {new Date(item.created_at).toLocaleString()}
-                </p>
-
-                <p style={{
-                  fontWeight: "bold",
-                  color: aprovado ? "#16a34a" : "#dc2626"
-                }}>
-                  Nota: {resultado.nota}/{resultado.total} ({resultado.percentual}%)
-                </p>
-
-                <div style={styles.answers}>
-                  <pre style={{ margin: 0 }}>
+                  <pre style={styles.respostas}>
                     {JSON.stringify(item.answers, null, 2)}
                   </pre>
+
                 </div>
+              );
+            })}
 
-              </div>
-            );
-          })}
-
-        </div>
+          </div>
+        ))}
 
       </div>
     </div>
@@ -183,87 +178,67 @@ export default function AdminPage() {
 const styles: any = {
 
   page: {
+    background: "#f8fafc",
     minHeight: "100vh",
-    background: "linear-gradient(135deg, #eef2ff, #f8fafc)",
     padding: "30px"
   },
 
   container: {
-    maxWidth: "950px",
+    maxWidth: "900px",
     margin: "auto"
   },
 
-  title: {
-    textAlign: "center",
-    marginBottom: "20px"
-  },
-
-  topButtons: {
+  top: {
     display: "flex",
     justifyContent: "center",
     gap: "10px",
     marginBottom: "20px"
   },
 
-  grid: {
-    display: "grid",
-    gap: "20px"
-  },
-
-  card: {
+  cardAluno: {
     background: "#fff",
     padding: "20px",
-    borderRadius: "14px",
-    boxShadow: "0 10px 25px rgba(0,0,0,0.1)"
+    borderRadius: "12px",
+    marginBottom: "20px",
+    boxShadow: "0 5px 15px rgba(0,0,0,0.1)"
   },
 
-  infoGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "10px",
+  cardProva: {
+    borderTop: "1px solid #eee",
+    paddingTop: "10px",
     marginTop: "10px"
   },
 
-  date: {
-    color: "#64748b",
-    marginTop: "10px"
-  },
-
-  answers: {
-    marginTop: "15px",
+  respostas: {
     background: "#eef2ff",
-    padding: "12px",
-    borderRadius: "10px"
+    padding: "10px",
+    borderRadius: "8px"
   },
 
   loginWrapper: {
-    minHeight: "100vh",
     display: "flex",
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
+    height: "100vh"
   },
 
   loginCard: {
     background: "#fff",
     padding: "30px",
-    borderRadius: "12px",
-    width: "300px",
-    boxShadow: "0 5px 20px rgba(0,0,0,0.1)"
+    borderRadius: "10px"
   },
 
   input: {
     width: "100%",
     padding: "10px",
-    marginTop: "10px",
-    borderRadius: "6px"
+    marginTop: "10px"
   },
 
-  button: {
+  btn: {
     padding: "10px",
     background: "#2563eb",
     color: "#fff",
     border: "none",
-    borderRadius: "6px",
     cursor: "pointer"
   },
 
@@ -272,7 +247,7 @@ const styles: any = {
     background: "#111827",
     color: "#fff",
     border: "none",
-    borderRadius: "6px",
     cursor: "pointer"
   }
+
 }
