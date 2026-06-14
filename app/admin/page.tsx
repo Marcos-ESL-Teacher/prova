@@ -103,7 +103,7 @@ export default function AdminPage() {
 
   async function carregarProvas() {
     const { data, error } = await supabase
-      .from("exam_submissions")
+      .from("prova")
       .select("*")
       .order("created_at", { ascending: false });
 
@@ -117,7 +117,7 @@ export default function AdminPage() {
 
   async function carregarLogs() {
     const { data, error } = await supabase
-      .from("exam_logs")
+      // .from("exam_logs")
       .select("*")
       .order("created_at", { ascending: false });
 
