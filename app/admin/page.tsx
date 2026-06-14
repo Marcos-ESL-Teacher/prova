@@ -26,24 +26,19 @@ function corrigir(answers: any) {
   };
 }
 
-function agrupar(dados: any[]) {
-  const estrutura: any = {};
+function agruparPorAluno(dados: any[]) {
+  const estrutura: Record<string, any[]> = {};
 
-  dados.forEach((item) => {
+  for (const item of dados) {
     const aluno = item.student_name || "Sem nome";
-
-    if (!estrutura[aluno]) {
-      estrutura[aluno] = [];
-    }
-
+    if (!estrutura[aluno]) estrutura[aluno] = [];
     estrutura[aluno].push(item);
-  });
+  }
 
   return estrutura;
 }
 
 export default function AdminPage() {
-
   const [senha, setSenha] = useState("");
   const [autorizado, setAutorizado] = useState(false);
   const [mensagem, setMensagem] = useState("");
@@ -52,31 +47,43 @@ export default function AdminPage() {
   const [carregando, setCarregando] = useState(false);
 
   async function verificarSenhaProfessor() {
-    const res = await fetch("/api/verify-admin-password", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ password: senha })
-    });
+    setMensagem("");
 
-    const data = await res.json();
+    try {
+      const res = await fetch("/api/verify-admin-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ password: senha })
+      });
 
-    if (data.ok) {
-      setAutorizado(true);
-      carregar();
-    } else {
-      setMensagem("Senha incorreta ❌");
+      const data = await res.json();
+
+      if (data.ok) {
+        setAutorizado(true);
+        await carregarProvas();
+      } else {
+        setMensagem(data.message || "Senha incorreta ❌");
+      }
+    } catch {
+      setMensagem("Erro ao validar senha.");
     }
   }
 
-  async function carregar() {
+  async function carregarProvas() {
     setCarregando(true);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("exam_submissions")
       .select("*")
       .order("created_at", { ascending: false });
+
+    if (error) {
+      alert("Erro ao carregar provas: " + error.message);
+      setCarregando(false);
+      return;
+    }
 
     setDados(data || []);
     setCarregando(false);
@@ -85,169 +92,254 @@ export default function AdminPage() {
   function sair() {
     setAutorizado(false);
     setSenha("");
+    setMensagem("");
     setDados([]);
   }
 
-  // 🔒 LOGIN
   if (!autorizado) {
     return (
       <div style={styles.loginWrapper}>
         <div style={styles.loginCard}>
-          <h2>🔒 Painel do Professor</h2>
+          <h2 style={styles.loginTitle}>🔒 Painel do Professor</h2>
 
           <input
             type="password"
-            placeholder="Senha"
+            placeholder="Senha do professor"
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
             style={styles.input}
           />
 
-          <button onClick={verificarSenhaProfessor} style={styles.btn}>
+          <button onClick={verificarSenhaProfessor} style={styles.primaryButton}>
             Entrar
           </button>
 
-          <p>{mensagem}</p>
+          <p style={styles.mensagem}>{mensagem}</p>
         </div>
       </div>
     );
   }
 
-  const estrutura = agrupar(dados);
+  const estrutura = agruparPorAluno(dados);
 
   return (
     <div style={styles.page}>
-
       <div style={styles.container}>
+        <h1 style={styles.header}>👨‍🏫 Painel do Professor</h1>
 
-        <h1 style={{ textAlign: "center" }}>👨‍🏫 Painel do Professor</h1>
-
-        <div style={styles.top}>
-          <button onClick={carregar} style={styles.btn}>
+        <div style={styles.topButtons}>
+          <button onClick={carregarProvas} style={styles.primaryButton}>
             🔄 Atualizar
           </button>
-          <button onClick={sair} style={styles.logout}>
+
+          <button onClick={sair} style={styles.logoutButton}>
             Sair
           </button>
         </div>
 
-        {Object.entries(estrutura).map(([aluno, provas]: any) => (
-          <div key={aluno} style={styles.cardAluno}>
+        {carregando && (
+          <p style={{ textAlign: "center", marginTop: 20 }}>Carregando provas...</p>
+        )}
 
-            <h2>📁 {aluno}</h2>
+        {!carregando && dados.length === 0 && (
+          <p style={{ textAlign: "center", marginTop: 20 }}>
+            Nenhuma prova enviada ainda.
+          </p>
+        )}
 
-            {provas.map((item: any) => {
-              const r = corrigir(item.answers);
-              const ok = r.percentual >= 50;
+        <div style={styles.grid}>
+          {Object.entries(estrutura).map(([aluno, provas]) => (
+            <div key={aluno} style={styles.alunoCard}>
+              <h2 style={styles.alunoTitulo}>📁 {aluno}</h2>
 
-              return (
-                <div key={item.id} style={styles.cardProva}>
+              <div style={styles.provasList}>
+                {provas.map((item: any) => {
+                  const resultado = corrigir(item.answers || {});
+                  const aprovado = resultado.percentual >= 50;
 
-                  <p><b>📄 {item.exam_name}</b></p>
-                  <p>📚 {item.book_name}</p>
-                  <p>📂 {item.unit_folder}</p>
-                  <p>📂 {item.subfolder_name}</p>
+                  return (
+                    <div key={item.id} style={styles.provaCard}>
+                      <div style={styles.infoGrid}>
+                        <p><strong>📄 Prova:</strong> {item.exam_name}</p>
+                        <p><strong>📚 Livro:</strong> {item.book_name}</p>
+                        <p><strong>📂 Pasta:</strong> {item.unit_folder}</p>
+                        <p><strong>📂 Subpasta:</strong> {item.subfolder_name}</p>
+                      </div>
 
-                  <p style={{ color: "#64748b" }}>
-                    {new Date(item.created_at).toLocaleString()}
-                  </p>
+                      <p style={styles.dataTexto}>
+                        📅 {new Date(item.created_at).toLocaleString()}
+                      </p>
 
-                  <p style={{
-                    color: ok ? "green" : "red",
-                    fontWeight: "bold"
-                  }}>
-                    Nota: {r.nota}/2 ({r.percentual}%)
-                  </p>
+                      <p
+                        style={{
+                          ...styles.notaTexto,
+                          color: aprovado ? "#16a34a" : "#dc2626"
+                        }}
+                      >
+                        Nota: {resultado.nota}/{resultado.total} ({resultado.percentual}%)
+                      </p>
 
-                  <pre style={styles.respostas}>
-                    {JSON.stringify(item.answers, null, 2)}
-                  </pre>
-
-                </div>
-              );
-            })}
-
-          </div>
-        ))}
-
+                      <div style={styles.answersBox}>
+                        <pre style={styles.answersPre}>
+                          {JSON.stringify(item.answers, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
 const styles: any = {
-
   page: {
-    background: "#f8fafc",
     minHeight: "100vh",
-    padding: "30px"
+    background: "linear-gradient(135deg, #eef2ff, #f8fafc)",
+    padding: "30px",
   },
 
   container: {
-    maxWidth: "900px",
-    margin: "auto"
+    maxWidth: "1000px",
+    margin: "0 auto",
+    fontFamily: "Arial, sans-serif",
   },
 
-  top: {
+  header: {
+    textAlign: "center",
+    fontSize: "34px",
+    marginBottom: "25px",
+    color: "#111827",
+  },
+
+  topButtons: {
     display: "flex",
     justifyContent: "center",
+    gap: "12px",
+    marginBottom: "25px",
+  },
+
+  grid: {
+    display: "grid",
+    gap: "24px",
+  },
+
+  alunoCard: {
+    background: "#ffffff",
+    borderRadius: "18px",
+    padding: "22px",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+  },
+
+  alunoTitulo: {
+    marginTop: 0,
+    marginBottom: "18px",
+    fontSize: "24px",
+    color: "#111827",
+  },
+
+  provasList: {
+    display: "grid",
+    gap: "16px",
+  },
+
+  provaCard: {
+    background: "#f8fafc",
+    borderRadius: "14px",
+    padding: "16px",
+    border: "1px solid #e5e7eb",
+  },
+
+  infoGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
     gap: "10px",
-    marginBottom: "20px"
   },
 
-  cardAluno: {
-    background: "#fff",
-    padding: "20px",
-    borderRadius: "12px",
-    marginBottom: "20px",
-    boxShadow: "0 5px 15px rgba(0,0,0,0.1)"
+  dataTexto: {
+    color: "#64748b",
+    marginTop: "12px",
+    marginBottom: "8px",
   },
 
-  cardProva: {
-    borderTop: "1px solid #eee",
-    paddingTop: "10px",
-    marginTop: "10px"
+  notaTexto: {
+    fontWeight: "bold",
+    marginTop: "6px",
+    marginBottom: "12px",
   },
 
-  respostas: {
-    background: "#eef2ff",
-    padding: "10px",
-    borderRadius: "8px"
+  answersBox: {
+    background: "#e0e7ff",
+    borderRadius: "10px",
+    padding: "12px",
+  },
+
+  answersPre: {
+    margin: 0,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    fontSize: "14px",
   },
 
   loginWrapper: {
+    minHeight: "100vh",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    height: "100vh"
+    background: "linear-gradient(135deg, #eef2ff, #f8fafc)",
+    fontFamily: "Arial, sans-serif",
   },
 
   loginCard: {
-    background: "#fff",
+    background: "#ffffff",
     padding: "30px",
-    borderRadius: "10px"
+    borderRadius: "16px",
+    width: "100%",
+    maxWidth: "360px",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+  },
+
+  loginTitle: {
+    textAlign: "center",
+    marginTop: 0,
+    marginBottom: "18px",
   },
 
   input: {
     width: "100%",
-    padding: "10px",
-    marginTop: "10px"
+    padding: "12px",
+    borderRadius: "8px",
+    border: "1px solid #d1d5db",
+    fontSize: "15px",
   },
 
-  btn: {
-    padding: "10px",
+  primaryButton: {
+    padding: "12px 16px",
     background: "#2563eb",
     color: "#fff",
     border: "none",
-    cursor: "pointer"
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "bold",
   },
 
-  logout: {
-    padding: "10px",
+  logoutButton: {
+    padding: "12px 16px",
     background: "#111827",
     color: "#fff",
     border: "none",
-    cursor: "pointer"
-  }
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
 
-}
+  mensagem: {
+    marginTop: "12px",
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+};
