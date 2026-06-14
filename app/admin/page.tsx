@@ -606,11 +606,28 @@ const styles: any = {
     border: "1px solid #e5e7eb",
   },
 
+  loginTopBadge: {
+    display: "inline-block",
+    background: "#e0e7ff",
+    color: "#1e3a8a",
+    padding: "6px 12px",
+    borderRadius: "999px",
+    fontWeight: "bold",
+    fontSize: "12px",
+    marginBottom: "12px",
+  },
+
   loginTitle: {
     textAlign: "center",
     marginTop: 0,
-    marginBottom: "18px",
+    marginBottom: "12px",
     color: "#111827",
+  },
+
+  loginSubtitle: {
+    textAlign: "center",
+    color: "#6b7280",
+    marginBottom: "16px",
   },
 
   input: {
