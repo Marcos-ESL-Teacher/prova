@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { supabase } from "../lib/supabase"
 
 export default function ProvaClient() {
@@ -11,15 +11,8 @@ export default function ProvaClient() {
   const [q1, setQ1] = useState("")
   const [q2, setQ2] = useState("")
   const [mensagem, setMensagem] = useState("")
-  const [bloqueado, setBloqueado] = useState(false)
-
-  const [logsSuspeitos, setLogsSuspeitos] = useState(0)
-
-  const studentNameRef = useRef("")
-
-  useEffect(() => {
-    studentNameRef.current = nome
-  }, [nome])
+  const [enviando, setEnviando] = useState(false)
+  const [enviado, setEnviado] = useState(false)
 
   async function verificarSenha() {
     setMensagem("")
@@ -46,112 +39,19 @@ export default function ProvaClient() {
     }
   }
 
-  async function registrarEvento(evento: string) {
-    try {
-      const { error } = await supabase.from("exam_logs").insert([
-        {
-          student_name: studentNameRef.current || "Sem nome",
-          evento
-        }
-      ])
-
-      if (error) {
-        console.log("ERRO AO GRAVAR LOG:", error)
-        return
-      }
-
-      // Atualiza a contagem local e trava ao chegar em 3
-      setLogsSuspeitos((prev) => {
-        const novoTotal = prev + 1
-
-        if (novoTotal >= 3) {
-          setBloqueado(true)
-          setMensagem("❌ Prova bloqueada por suspeita de cola.")
-        }
-
-        return novoTotal
-      })
-    } catch (err) {
-      console.log("FALHA AO GRAVAR LOG:", err)
-    }
-  }
-
-  useEffect(() => {
-    if (!liberado) return
-
-    function onVisibilityChange() {
-      if (document.hidden) {
-        registrarEvento("Troca de aba / página ocultada")
-      }
-    }
-
-    function onBlur() {
-      registrarEvento("Janela perdeu foco")
-    }
-
-    function onCopy(e: ClipboardEvent) {
-      e.preventDefault()
-      registrarEvento("Tentativa de copiar")
-    }
-
-    function onCut(e: ClipboardEvent) {
-      e.preventDefault()
-      registrarEvento("Tentativa de recortar")
-    }
-
-    function onPaste(e: ClipboardEvent) {
-      e.preventDefault()
-      registrarEvento("Tentativa de colar")
-    }
-
-    function onContextMenu(e: MouseEvent) {
-      e.preventDefault()
-      registrarEvento("Tentativa de abrir menu com botão direito")
-    }
-
-    function onKeyDown(e: KeyboardEvent) {
-      const tecla = e.key.toLowerCase()
-
-      if ((e.ctrlKey || e.metaKey) && ["c", "v", "x", "u", "s", "p"].includes(tecla)) {
-        e.preventDefault()
-        registrarEvento(`Atalho bloqueado: ${tecla.toUpperCase()}`)
-      }
-
-      if (tecla === "f12") {
-        e.preventDefault()
-        registrarEvento("Tentativa de abrir DevTools com F12")
-      }
-    }
-
-    document.addEventListener("visibilitychange", onVisibilityChange)
-    window.addEventListener("blur", onBlur)
-    document.addEventListener("copy", onCopy)
-    document.addEventListener("cut", onCut)
-    document.addEventListener("paste", onPaste)
-    document.addEventListener("contextmenu", onContextMenu)
-    document.addEventListener("keydown", onKeyDown)
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange)
-      window.removeEventListener("blur", onBlur)
-      document.removeEventListener("copy", onCopy)
-      document.removeEventListener("cut", onCut)
-      document.removeEventListener("paste", onPaste)
-      document.removeEventListener("contextmenu", onContextMenu)
-      document.removeEventListener("keydown", onKeyDown)
-    }
-  }, [liberado])
-
   async function enviarProva() {
     if (!nome.trim()) {
       setMensagem("Digite seu nome!")
       return
     }
 
-    if (bloqueado) {
-      setMensagem("❌ Prova bloqueada por suspeita de cola.")
+    if (enviado) {
+      setMensagem("Prova já enviada ✅")
       return
     }
+
+    setEnviando(true)
+    setMensagem("")
 
     try {
       const { error } = await supabase
@@ -175,153 +75,309 @@ export default function ProvaClient() {
         setMensagem("Erro ao enviar!")
       } else {
         setMensagem("✅ Prova enviada com sucesso!")
-        setBloqueado(true)
+        setEnviado(true)
       }
     } catch (err) {
       console.log("FALHA:", err)
       setMensagem("Falha geral!")
+    } finally {
+      setEnviando(false)
     }
   }
 
+  // 🔒 Tela de senha premium
   if (!liberado) {
     return (
-      <div style={{
-        minHeight: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        background: "#f3f4f6",
-        fontFamily: "Arial"
-      }}>
-        <div style={{
-          background: "#fff",
-          padding: "30px",
-          borderRadius: "15px",
-          width: "100%",
-          maxWidth: "350px",
-          boxShadow: "0 5px 20px rgba(0,0,0,0.1)"
-        }}>
-          <h2 style={{ textAlign: "center" }}>🔒 Acesso à Prova</h2>
+      <div style={styles.authWrapper}>
+        <div style={styles.authCard}>
+          <div style={styles.badge}>Student Access</div>
+          <h1 style={styles.authTitle}>📝 Acesso à Prova</h1>
+          <p style={styles.authSubtitle}>
+            Digite a senha para começar sua avaliação
+          </p>
 
           <input
             type="password"
             placeholder="Digite a senha"
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
-            style={{ width: "100%", padding: "10px", marginTop: "10px" }}
+            style={styles.input}
           />
 
-          <button
-            onClick={verificarSenha}
-            style={{
-              marginTop: "15px",
-              width: "100%",
-              padding: "10px",
-              background: "#2563eb",
-              color: "#fff",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer"
-            }}
-          >
-            Entrar
+          <button onClick={verificarSenha} style={styles.primaryButton}>
+            Entrar na prova
           </button>
 
-          <p style={{ marginTop: "10px", textAlign: "center" }}>
-            {mensagem}
-          </p>
+          <p style={styles.message}>{mensagem}</p>
         </div>
       </div>
     )
   }
 
+  // ✅ Tela premium da prova
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "linear-gradient(135deg, #eef2ff, #f8fafc)",
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      fontFamily: "Arial"
-    }}>
-      <div style={{
-        background: "#fff",
-        padding: "30px",
-        borderRadius: "20px",
-        width: "100%",
-        maxWidth: "550px",
-        boxShadow: "0px 10px 30px rgba(0,0,0,0.1)"
-      }}>
-        <h1 style={{ textAlign: "center", marginTop: 0 }}>📝 Prova</h1>
-
-        {logsSuspeitos > 0 && (
-          <div style={{
-            background: logsSuspeitos >= 3 ? "#fee2e2" : "#fef3c7",
-            border: logsSuspeitos >= 3 ? "1px solid #dc2626" : "1px solid #f59e0b",
-            color: logsSuspeitos >= 3 ? "#991b1b" : "#92400e",
-            padding: "12px",
-            borderRadius: "8px",
-            marginBottom: "16px",
-            fontWeight: "bold"
-          }}>
-            {logsSuspeitos >= 3
-              ? "❌ Prova bloqueada por suspeita de cola."
-              : `⚠️ Evento(s) suspeito(s) detectado(s): ${logsSuspeitos}/3`}
+    <div style={styles.page}>
+      <div style={styles.container}>
+        <div style={styles.hero}>
+          <div>
+            <div style={styles.badge}>Student Area</div>
+            <h1 style={styles.title}>📝 Prova Simples</h1>
+            <p style={styles.subtitle}>
+              Responda às questões abaixo e envie quando terminar
+            </p>
           </div>
-        )}
-
-        <div style={{ marginTop: "20px" }}>
-          <label>Nome do aluno:</label>
-          <input
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-            style={{ width: "100%", padding: "10px" }}
-            disabled={bloqueado}
-          />
         </div>
 
-        <div style={{ marginTop: "20px" }}>
-          <p>1) Qual é 2 + 2?</p>
-          <input
-            value={q1}
-            onChange={(e) => setQ1(e.target.value)}
-            style={{ width: "100%", padding: "10px" }}
-            disabled={bloqueado}
-          />
+        <div style={styles.card}>
+          {/* Nome */}
+          <div style={styles.fieldBlock}>
+            <label style={styles.label}>Nome do aluno</label>
+            <input
+              type="text"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              style={styles.input}
+              placeholder="Digite seu nome completo"
+              disabled={enviado}
+            />
+          </div>
+
+          {/* Questão 1 */}
+          <div style={styles.questionCard}>
+            <div style={styles.questionTop}>
+              <div style={styles.questionNumber}>01</div>
+              <div>
+                <h3 style={styles.questionTitle}>Qual é 2 + 2?</h3>
+                <p style={styles.questionSubtitle}>Digite sua resposta</p>
+              </div>
+            </div>
+
+            <input
+              type="text"
+              value={q1}
+              onChange={(e) => setQ1(e.target.value)}
+              style={styles.input}
+              placeholder="Sua resposta"
+              disabled={enviado}
+            />
+          </div>
+
+          {/* Questão 2 */}
+          <div style={styles.questionCard}>
+            <div style={styles.questionTop}>
+              <div style={styles.questionNumber}>02</div>
+              <div>
+                <h3 style={styles.questionTitle}>Qual é a capital do Brasil?</h3>
+                <p style={styles.questionSubtitle}>Digite sua resposta</p>
+              </div>
+            </div>
+
+            <input
+              type="text"
+              value={q2}
+              onChange={(e) => setQ2(e.target.value)}
+              style={styles.input}
+              placeholder="Sua resposta"
+              disabled={enviado}
+            />
+          </div>
+
+          {/* Botão */}
+          <button
+            onClick={enviarProva}
+            disabled={enviado || enviando}
+            style={{
+              ...styles.submitButton,
+              opacity: enviado || enviando ? 0.7 : 1,
+              cursor: enviado || enviando ? "not-allowed" : "pointer",
+            }}
+          >
+            {enviando
+              ? "Enviando..."
+              : enviado
+              ? "Prova já enviada"
+              : "Enviar Prova"}
+          </button>
+
+          <p style={styles.message}>{mensagem}</p>
         </div>
-
-        <div style={{ marginTop: "20px" }}>
-          <p>2) Qual é a capital do Brasil?</p>
-          <input
-            value={q2}
-            onChange={(e) => setQ2(e.target.value)}
-            style={{ width: "100%", padding: "10px" }}
-            disabled={bloqueado}
-          />
-        </div>
-
-        <button
-          onClick={enviarProva}
-          disabled={bloqueado}
-          style={{
-            marginTop: "20px",
-            width: "100%",
-            padding: "12px",
-            background: bloqueado ? "#9ca3af" : "#2563eb",
-            color: "#fff",
-            border: "none",
-            borderRadius: "5px",
-            cursor: bloqueado ? "not-allowed" : "pointer",
-            opacity: bloqueado ? 0.8 : 1
-          }}
-        >
-          {bloqueado ? "Prova bloqueada por suspeita de cola" : "Enviar Prova"}
-        </button>
-
-        <p style={{ marginTop: "10px", textAlign: "center" }}>
-          {mensagem}
-        </p>
       </div>
     </div>
   )
 }
+
+// 🎨 Visual premium / SaaS
+const styles: any = {
+  page: {
+    minHeight: "100vh",
+    background: "linear-gradient(135deg, #eef2ff, #ffffff)",
+    padding: "32px",
+  },
+
+  container: {
+    maxWidth: "820px",
+    margin: "0 auto",
+    fontFamily: "Arial, sans-serif",
+  },
+
+  hero: {
+    marginBottom: "24px",
+  },
+
+  badge: {
+    display: "inline-block",
+    background: "#dbeafe",
+    color: "#1d4ed8",
+    padding: "6px 12px",
+    borderRadius: "999px",
+    fontWeight: "bold",
+    fontSize: "12px",
+    marginBottom: "10px",
+  },
+
+  title: {
+    margin: 0,
+    fontSize: "34px",
+    color: "#111827",
+  },
+
+  subtitle: {
+    marginTop: "10px",
+    color: "#6b7280",
+    fontSize: "15px",
+  },
+
+  card: {
+    background: "#ffffff",
+    borderRadius: "20px",
+    padding: "24px",
+    boxShadow: "0 12px 30px rgba(0,0,0,0.08)",
+    border: "1px solid #e5e7eb",
+  },
+
+  fieldBlock: {
+    marginBottom: "20px",
+  },
+
+  label: {
+    display: "block",
+    marginBottom: "8px",
+    fontWeight: "bold",
+    color: "#111827",
+  },
+
+  input: {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: "10px",
+    border: "1px solid #d1d5db",
+    fontSize: "15px",
+    outline: "none",
+  },
+
+  questionCard: {
+    background: "#f8fafc",
+    border: "1px solid #e5e7eb",
+    borderRadius: "16px",
+    padding: "18px",
+    marginBottom: "16px",
+  },
+
+  questionTop: {
+    display: "flex",
+    gap: "14px",
+    alignItems: "flex-start",
+    marginBottom: "12px",
+  },
+
+  questionNumber: {
+    width: "40px",
+    height: "40px",
+    borderRadius: "999px",
+    background: "#2563eb",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "bold",
+    flexShrink: 0,
+  },
+
+  questionTitle: {
+    margin: 0,
+    fontSize: "18px",
+    color: "#111827",
+  },
+
+  questionSubtitle: {
+    marginTop: "6px",
+    marginBottom: 0,
+    color: "#6b7280",
+    fontSize: "14px",
+  },
+
+  submitButton: {
+    width: "100%",
+    padding: "14px 16px",
+    background: "#2563eb",
+    color: "#fff",
+    border: "none",
+    borderRadius: "12px",
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: "16px",
+    marginTop: "8px",
+  },
+
+  message: {
+    marginTop: "14px",
+    textAlign: "center",
+    fontWeight: "bold",
+    color: "#111827",
+  },
+
+  authWrapper: {
+    minHeight: "100vh",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    background: "linear-gradient(135deg, #eef2ff, #f8fafc)",
+    fontFamily: "Arial, sans-serif",
+    padding: "20px",
+  },
+
+  authCard: {
+    background: "#ffffff",
+    padding: "32px",
+    borderRadius: "20px",
+    width: "100%",
+    maxWidth: "400px",
+    boxShadow: "0 12px 30px rgba(0,0,0,0.08)",
+    border: "1px solid #e5e7eb",
+  },
+
+  authTitle: {
+    margin: 0,
+    textAlign: "center",
+    color: "#111827",
+  },
+
+  authSubtitle: {
+    marginTop: "10px",
+    marginBottom: "16px",
+    textAlign: "center",
+    color: "#6b7280",
+  },
+
+  primaryButton: {
+    width: "100%",
+    padding: "14px 16px",
+    background: "#2563eb",
+    color: "#fff",
+    border: "none",
+    borderRadius: "12px",
+    cursor: "pointer",
+    fontWeight: "bold",
+    marginTop: "14px",
+  },
+};
