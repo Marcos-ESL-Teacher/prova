@@ -21,6 +21,16 @@ type ExamBlockDraft = {
 };
 
 type ParserMode = "sbs" | "generic";
+type OcrMode = "columns" | "full";
+
+type ExtractedOptions = {
+  questionText: string;
+  a?: string | null;
+  b?: string | null;
+  c?: string | null;
+  d?: string | null;
+  e?: string | null;
+};
 
 export default function ImportPdfPage() {
   const [examId, setExamId] = useState("");
@@ -30,6 +40,7 @@ export default function ImportPdfPage() {
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrStatus, setOcrStatus] = useState("");
   const [parserMode, setParserMode] = useState<ParserMode>("sbs");
+  const [ocrMode, setOcrMode] = useState<OcrMode>("columns");
 
   function cleanLine(line: string) {
     return line
@@ -43,8 +54,12 @@ export default function ImportPdfPage() {
   function normalizeOcrText(text: string) {
     return text
       .replace(/\r/g, "\n")
-      .replace(/([a-eA-E])\.\s+/g, "$1. ")
-      .replace(/([a-eA-E])\)\s+/g, "$1) ")
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .replace(/\u00a0/g, " ")
+      .replace(/[|]/g, " ")
+      .replace(/\s+(\d{1,2})[\.)]\s+(?=[A-Z])/g, "\n$1. ")
+      .replace(/\s+([a-e])[\.)]\s+/g, "\n$1. ")
       .replace(/\n{3,}/g, "\n\n");
   }
 
@@ -53,11 +68,11 @@ export default function ImportPdfPage() {
   }
 
   function isQuestionLine(line: string) {
-    return /^\d+[\.\)]\s+/.test(line);
+    return /^\d{1,2}[\.\)]\s+/.test(line);
   }
 
   function isOptionLine(line: string) {
-    return /^[A-Ea-e][\).]\s+/.test(line);
+    return /^[a-e][\).]\s+/.test(line);
   }
 
   function parseOption(line: string) {
@@ -126,13 +141,49 @@ export default function ImportPdfPage() {
     return "multiple_choice";
   }
 
+  async function recognizeCanvas(canvas: HTMLCanvasElement, label: string) {
+    const Tesseract = await import("tesseract.js");
+
+    const result = await Tesseract.recognize(canvas, "eng", {
+      logger: (m: any) => {
+        if (m.status === "recognizing text") {
+          const percent = Math.round((m.progress || 0) * 100);
+          setOcrStatus(`${label}: ${percent}%`);
+        }
+      },
+    });
+
+    return result.data.text;
+  }
+
+  function cropCanvas(
+    sourceCanvas: HTMLCanvasElement,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ) {
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Não foi possível criar canvas recortado.");
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+
+    context.drawImage(sourceCanvas, x, y, width, height, 0, 0, width, height);
+
+    return canvas;
+  }
+
   async function extractTextFromPdfWithOcr(file: File) {
     try {
       setOcrRunning(true);
       setOcrStatus("Lendo PDF...");
 
       const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
-      const Tesseract = await import("tesseract.js");
 
       pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
         "pdfjs-dist/legacy/build/pdf.worker.mjs",
@@ -148,36 +199,69 @@ export default function ImportPdfPage() {
         setOcrStatus(`Convertendo página ${pageNumber} de ${pdf.numPages}...`);
 
         const page = await pdf.getPage(pageNumber);
-        const viewport = page.getViewport({ scale: 2.4 });
+        const viewport = page.getViewport({ scale: 2.8 });
 
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
+        const fullCanvas = document.createElement("canvas");
+        const fullContext = fullCanvas.getContext("2d");
 
-        if (!context) {
+        if (!fullContext) {
           throw new Error("Não foi possível criar o canvas para OCR.");
         }
 
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        fullCanvas.width = viewport.width;
+        fullCanvas.height = viewport.height;
 
         await page.render({
-          canvasContext: context,
+          canvasContext: fullContext,
           viewport,
         }).promise;
 
-        setOcrStatus(`Lendo texto da página ${pageNumber} de ${pdf.numPages}...`);
+        if (ocrMode === "columns") {
+          const topCut = Math.floor(fullCanvas.height * 0.13);
+          const bottomCut = Math.floor(fullCanvas.height * 0.95);
+          const usableHeight = bottomCut - topCut;
+          const middle = Math.floor(fullCanvas.width / 2);
 
-        const result = await Tesseract.recognize(canvas, "eng", {
-          logger: (m: any) => {
-            if (m.status === "recognizing text") {
-              const percent = Math.round((m.progress || 0) * 100);
-              setOcrStatus(`OCR página ${pageNumber}/${pdf.numPages}: ${percent}%`);
-            }
-          },
-        });
+          const leftCanvas = cropCanvas(
+            fullCanvas,
+            0,
+            topCut,
+            middle,
+            usableHeight
+          );
 
-        fullText += `\n\n--- PAGE ${pageNumber} ---\n\n`;
-        fullText += result.data.text;
+          const rightCanvas = cropCanvas(
+            fullCanvas,
+            middle,
+            topCut,
+            fullCanvas.width - middle,
+            usableHeight
+          );
+
+          setOcrStatus(`OCR página ${pageNumber}/${pdf.numPages} coluna esquerda...`);
+          const leftText = await recognizeCanvas(
+            leftCanvas,
+            `OCR página ${pageNumber}/${pdf.numPages} esquerda`
+          );
+
+          setOcrStatus(`OCR página ${pageNumber}/${pdf.numPages} coluna direita...`);
+          const rightText = await recognizeCanvas(
+            rightCanvas,
+            `OCR página ${pageNumber}/${pdf.numPages} direita`
+          );
+
+          fullText += `\n\n--- PAGE ${pageNumber} LEFT ---\n\n${leftText}`;
+          fullText += `\n\n--- PAGE ${pageNumber} RIGHT ---\n\n${rightText}`;
+        } else {
+          setOcrStatus(`OCR página ${pageNumber}/${pdf.numPages} inteira...`);
+
+          const pageText = await recognizeCanvas(
+            fullCanvas,
+            `OCR página ${pageNumber}/${pdf.numPages}`
+          );
+
+          fullText += `\n\n--- PAGE ${pageNumber} FULL ---\n\n${pageText}`;
+        }
       }
 
       setRawText(normalizeOcrText(fullText.trim()));
@@ -247,13 +331,13 @@ export default function ImportPdfPage() {
     };
   }
 
-  function pushCurrentQuestion(
-    generated: ExamBlockDraft[],
-    currentQuestion: ExamBlockDraft | null
-  ) {
-    if (currentQuestion) {
-      generated.push(currentQuestion);
-    }
+  function setOptionOnQuestion(question: ExamBlockDraft, letter: string, text: string) {
+    if (letter === "a") question.option_a = text;
+    if (letter === "b") question.option_b = text;
+    if (letter === "c") question.option_c = text;
+    if (letter === "d") question.option_d = text;
+    if (letter === "e") question.option_e = text;
+    question.question_type = "multiple_choice";
   }
 
   function generateBlocksGeneric() {
@@ -300,7 +384,7 @@ export default function ImportPdfPage() {
       if (isQuestionLine(line)) {
         flush();
 
-        const match = line.match(/^(\d+)[\.\)]\s+(.*)$/);
+        const match = line.match(/^(\d{1,2})[\.\)]\s+(.*)$/);
         const number = match ? Number(match[1]) : null;
         const questionText = match ? match[2] : line;
 
@@ -315,14 +399,7 @@ export default function ImportPdfPage() {
 
       if (isOptionLine(line) && currentQuestion) {
         const { letter, text } = parseOption(line);
-
-        if (letter === "a") currentQuestion.option_a = text;
-        if (letter === "b") currentQuestion.option_b = text;
-        if (letter === "c") currentQuestion.option_c = text;
-        if (letter === "d") currentQuestion.option_d = text;
-        if (letter === "e") currentQuestion.option_e = text;
-
-        currentQuestion.question_type = "multiple_choice";
+        setOptionOnQuestion(currentQuestion, letter, text);
         continue;
       }
 
@@ -337,7 +414,7 @@ export default function ImportPdfPage() {
     }
 
     flush();
-    setBlocks(normalizeSortOrder(generated));
+    setBlocks(normalizeSortOrder(postProcessSbsBlocks(generated)));
   }
 
   function generateBlocksSbs() {
@@ -382,14 +459,7 @@ export default function ImportPdfPage() {
 
       if (looksLikeHeader(line) && !headerCreated) {
         flushAll();
-
-        let title = line;
-
-        if (!lower.includes("chapter") && rawText.toLowerCase().includes("chapter")) {
-          title = "SBS Test";
-        }
-
-        generated.push(makeHeaderBlock(title, sort++));
+        generated.push(makeHeaderBlock(cleanHeaderTitle(line), sort++));
         headerCreated = true;
         continue;
       }
@@ -397,14 +467,10 @@ export default function ImportPdfPage() {
       if (isSbsSection(line)) {
         flushAll();
 
-        section = line.toUpperCase();
+        section = cleanSectionTitle(line);
 
         generated.push(
-          makeInstructionBlock(
-            section,
-            getSectionDescription(section),
-            sort++
-          )
+          makeInstructionBlock(section, getSectionDescription(section), sort++)
         );
         continue;
       }
@@ -428,7 +494,7 @@ export default function ImportPdfPage() {
       if (isQuestionLine(line)) {
         flushQuestion();
 
-        const match = line.match(/^(\d+)[\.\)]\s+(.*)$/);
+        const match = line.match(/^(\d{1,2})[\.\)]\s+(.*)$/);
         const number = match ? Number(match[1]) : null;
         const questionText = match ? match[2] : line;
 
@@ -444,14 +510,7 @@ export default function ImportPdfPage() {
 
       if (isOptionLine(line) && currentQuestion) {
         const { letter, text } = parseOption(line);
-
-        if (letter === "a") currentQuestion.option_a = text;
-        if (letter === "b") currentQuestion.option_b = text;
-        if (letter === "c") currentQuestion.option_c = text;
-        if (letter === "d") currentQuestion.option_d = text;
-        if (letter === "e") currentQuestion.option_e = text;
-
-        currentQuestion.question_type = "multiple_choice";
+        setOptionOnQuestion(currentQuestion, letter, text);
         continue;
       }
 
@@ -460,22 +519,7 @@ export default function ImportPdfPage() {
         continue;
       }
 
-      if (
-        lower.includes("had happened") ||
-        lower.includes("is happened") ||
-        lower.includes("happened") ||
-        lower.includes("had broken") ||
-        lower.includes("broke") ||
-        lower.includes("were breaking") ||
-        lower.includes("taking") ||
-        lower.includes("take to") ||
-        lower.includes("to take") ||
-        lower.includes("weren") ||
-        lower.includes("had been") ||
-        lower.includes("been thinking") ||
-        lower.includes("considered") ||
-        lower.includes("decided")
-      ) {
+      if (looksLikeWhichWordOptionLine(line)) {
         generated.push({
           block_type: "word_bank",
           sort_order: sort++,
@@ -499,6 +543,35 @@ export default function ImportPdfPage() {
     setBlocks(normalizeSortOrder(improved));
   }
 
+  function cleanHeaderTitle(line: string) {
+    const cleaned = cleanLine(line)
+      .replace(/['"]/g, "")
+      .replace(/\(\s*/g, "")
+      .replace(/\s*\)/g, "");
+
+    if (cleaned.toLowerCase().includes("chapter")) return cleaned;
+
+    return cleaned || "SBS Test";
+  }
+
+  function cleanSectionTitle(line: string) {
+    const lower = line.toLowerCase();
+
+    if (lower.includes("which word doesn't belong") || lower.includes("which word doesnt belong")) {
+      return "WHICH WORD DOESN'T BELONG?";
+    }
+
+    if (lower.includes("which word")) {
+      return "WHICH WORD?";
+    }
+
+    if (lower.includes("choose")) {
+      return "CHOOSE";
+    }
+
+    return line.toUpperCase();
+  }
+
   function getSectionDescription(section: string) {
     const lower = section.toLowerCase();
 
@@ -517,6 +590,29 @@ export default function ImportPdfPage() {
     return section;
   }
 
+  function looksLikeWhichWordOptionLine(line: string) {
+    const lower = line.toLowerCase();
+
+    const hits = [
+      "had happened",
+      "is happened",
+      "happened",
+      "had broken",
+      "broke",
+      "were breaking",
+      "taking",
+      "take to",
+      "to take",
+      "weren",
+      "had been",
+      "been thinking",
+      "considered",
+      "decided",
+    ].filter((word) => lower.includes(word)).length;
+
+    return hits >= 2;
+  }
+
   function postProcessSbsBlocks(inputBlocks: ExamBlockDraft[]) {
     const output: ExamBlockDraft[] = [];
 
@@ -527,7 +623,6 @@ export default function ImportPdfPage() {
       }
 
       const content = block.content || "";
-
       const embeddedOptions = extractEmbeddedOptions(content);
 
       if (embeddedOptions) {
@@ -547,26 +642,92 @@ export default function ImportPdfPage() {
       output.push(block);
     });
 
-    return output;
+    return mergeBrokenOptionBlocks(output);
   }
 
-  function extractEmbeddedOptions(text: string) {
-    const normalized = text.replace(/\s+/g, " ").trim();
+  function extractEmbeddedOptions(text: string): ExtractedOptions | null {
+    const normalized = cleanLine(text);
 
-    const match = normalized.match(
-      /^(.*?)(?:\s|^)[aA][\).]\s+(.+?)\s+[bB][\).]\s+(.+?)\s+[cC][\).]\s+(.+?)\s+[dD][\).]\s+(.+?)(?:\s+[eE][\).]\s+(.+))?$/
+    const markers: Array<{ letter: string; index: number; length: number }> = [];
+    const regex = /(?:^|\s)([a-e])[\).]\s+/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(normalized)) !== null) {
+      const markerText = match[0];
+      const letter = match[1].toLowerCase();
+      const index = match.index + markerText.search(/[a-e]/i);
+      markers.push({
+        letter,
+        index,
+        length: markerText.length - markerText.search(/[a-e]/i),
+      });
+    }
+
+    const required = ["a", "b", "c", "d"];
+    const hasRequired = required.every((letter) =>
+      markers.some((marker) => marker.letter === letter)
     );
 
-    if (!match) return null;
+    if (!hasRequired) return null;
 
-    return {
-      questionText: cleanLine(match[1]),
-      a: cleanLine(match[2]),
-      b: cleanLine(match[3]),
-      c: cleanLine(match[4]),
-      d: cleanLine(match[5]),
-      e: match[6] ? cleanLine(match[6]) : null,
+    const firstA = markers.find((marker) => marker.letter === "a");
+    if (!firstA || firstA.index < 8) return null;
+
+    const questionText = cleanLine(normalized.slice(0, firstA.index));
+
+    const result: ExtractedOptions = {
+      questionText,
+      a: null,
+      b: null,
+      c: null,
+      d: null,
+      e: null,
     };
+
+    markers.forEach((marker, position) => {
+      const start = marker.index + marker.length;
+      const end =
+        position + 1 < markers.length ? markers[position + 1].index : normalized.length;
+
+      const optionText = cleanLine(normalized.slice(start, end));
+
+      if (marker.letter === "a") result.a = optionText;
+      if (marker.letter === "b") result.b = optionText;
+      if (marker.letter === "c") result.c = optionText;
+      if (marker.letter === "d") result.d = optionText;
+      if (marker.letter === "e") result.e = optionText;
+    });
+
+    return result;
+  }
+
+  function mergeBrokenOptionBlocks(items: ExamBlockDraft[]) {
+    const output: ExamBlockDraft[] = [];
+
+    items.forEach((block) => {
+      if (block.block_type !== "instruction" || !block.content) {
+        output.push(block);
+        return;
+      }
+
+      const line = block.content;
+
+      if (isOptionLine(line)) {
+        const previousQuestion = [...output]
+          .reverse()
+          .find((candidate) => candidate.block_type === "question");
+
+        if (previousQuestion) {
+          const { letter, text } = parseOption(line);
+          setOptionOnQuestion(previousQuestion, letter, text);
+          return;
+        }
+      }
+
+      output.push(block);
+    });
+
+    return output;
   }
 
   function normalizeSortOrder(items: ExamBlockDraft[]) {
@@ -783,6 +944,16 @@ export default function ImportPdfPage() {
         >
           <option value="sbs">SBS inteligente</option>
           <option value="generic">Genérico</option>
+        </select>
+
+        <label style={styles.label}>Modo do OCR</label>
+        <select
+          value={ocrMode}
+          onChange={(e) => setOcrMode(e.target.value as OcrMode)}
+          style={styles.input}
+        >
+          <option value="columns">Por colunas - melhor para SBS</option>
+          <option value="full">Página inteira</option>
         </select>
 
         <div style={styles.uploadBox}>
