@@ -1,710 +1,557 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
-// ✅ normalizar texto
-function normalizar(texto: string) {
-  return (texto || "")
-    .toLowerCase()
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
+type TabKey =
+  | "dashboard"
+  | "exams"
+  | "corrections"
+  | "submissions"
+  | "students"
+  | "reports"
+  | "settings";
 
-// ✅ corrigir respostas
-function corrigir(answers: any) {
-  const r1 = normalizar(answers?.pergunta1 || "");
-  const r2 = normalizar(answers?.pergunta2 || "");
+type Submission = {
+  id: string;
+  student_name?: string | null;
+  student_email?: string | null;
+  protocol?: string | null;
+  exam_name?: string | null;
+  book_name?: string | null;
+  final_score?: number | null;
+  correction_completed?: boolean | null;
+  created_at?: string | null;
+};
 
-  const acertos =
-    (r1 === "4" || r1 === "quatro" ? 1 : 0) +
-    (r2 === "brasilia" ? 1 : 0);
+export default function TeacherDashboardPage() {
+  const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  return {
-    nota: acertos,
-    total: 2,
-    percentual: Math.round((acertos / 2) * 100),
-  };
-}
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
 
-// ✅ agrupar por aluno
-function agruparPorAluno(dados: any[]) {
-  const estrutura: Record<string, any[]> = {};
-
-  dados.forEach((item) => {
-    const aluno = item.student_name || "Sem nome";
-    if (!estrutura[aluno]) {
-      estrutura[aluno] = [];
-    }
-    estrutura[aluno].push(item);
-  });
-
-  return estrutura;
-}
-
-export default function AdminPage() {
-  // 🔒 login
-  const [senha, setSenha] = useState("");
-  const [autorizado, setAutorizado] = useState(false);
-  const [mensagem, setMensagem] = useState("");
-
-  // 📊 dados
-  const [dados, setDados] = useState<any[]>([]);
-  const [carregando, setCarregando] = useState(false);
-
-  // 🔎 filtro
-  const [filtroAluno, setFiltroAluno] = useState("");
-
-  async function verificarSenhaProfessor() {
-    setMensagem("");
-
-    try {
-      const res = await fetch("/api/verify-admin-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ password: senha })
-      });
-
-      const data = await res.json();
-
-      if (data.ok) {
-        setAutorizado(true);
-        await carregarProvas();
-      } else {
-        setMensagem(data.message || "Senha incorreta ❌");
-      }
-    } catch {
-      setMensagem("Erro ao validar senha.");
-    }
-  }
-
-  async function carregarProvas() {
-    setCarregando(true);
+  async function loadDashboardData() {
+    setLoading(true);
 
     const { data, error } = await supabase
       .from("exam_submissions")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(30);
+
+    setLoading(false);
 
     if (error) {
-      alert("Erro ao carregar provas: " + error.message);
-      setCarregando(false);
+      console.warn(error.message);
       return;
     }
 
-    setDados(data || []);
-    setCarregando(false);
+    setSubmissions((data || []) as Submission[]);
   }
 
-  async function apagarProva(id: string) {
-    const confirmar = confirm("Deseja apagar esta prova?");
-    if (!confirmar) return;
-
-    const { error } = await supabase
-      .from("exam_submissions")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      alert("Erro ao apagar a prova: " + error.message);
-      return;
-    }
-
-    alert("✅ Prova apagada com sucesso!");
-    await carregarProvas();
+  function goTo(path: string) {
+    window.location.href = path;
   }
 
-  function sair() {
-    setAutorizado(false);
-    setSenha("");
-    setMensagem("");
-    setDados([]);
-    setFiltroAluno("");
-  }
+  const stats = useMemo(() => {
+    const totalSubmissions = submissions.length;
 
-  const dadosFiltrados = useMemo(() => {
-    return dados.filter((item) => {
-      const aluno = (item.student_name || "").toLowerCase();
-      return aluno.includes(filtroAluno.toLowerCase());
-    });
-  }, [dados, filtroAluno]);
+    const uniqueStudents = new Set(
+      submissions
+        .map((item) => item.student_email || item.student_name)
+        .filter(Boolean)
+    ).size;
 
-  const estrutura = useMemo(() => {
-    return agruparPorAluno(dadosFiltrados);
-  }, [dadosFiltrados]);
+    const completed = submissions.filter((item) => item.correction_completed).length;
 
-  const totalProvas = dados.length;
-  const totalAlunos = new Set(
-    dados.map((item) => item.student_name || "Sem nome")
-  ).size;
+    const scores = submissions
+      .map((item) => item.final_score)
+      .filter((score) => typeof score === "number") as number[];
 
-  const mediaPercentual = useMemo(() => {
-    if (dados.length === 0) return 0;
-    const total = dados.reduce((acc, item) => {
-      const r = corrigir(item.answers || {});
-      return acc + r.percentual;
-    }, 0);
-    return Math.round(total / dados.length);
-  }, [dados]);
+    const averageScore =
+      scores.length > 0
+        ? Number((scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(2))
+        : 0;
 
-  // 🔒 LOGIN
-  if (!autorizado) {
-    return (
-      <div style={styles.loginWrapper}>
-        <div style={styles.loginCard}>
-          <div style={styles.loginTopBadge}>Teacher Access</div>
+    return {
+      totalSubmissions,
+      uniqueStudents,
+      completed,
+      averageScore,
+    };
+  }, [submissions]);
 
-          <h2 style={styles.loginTitle}>👨‍🏫 Painel do Professor</h2>
-          <p style={styles.loginSubtitle}>
-            Acesse o painel premium das provas
-          </p>
-
-          <input
-            type="password"
-            placeholder="Senha do professor"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            style={styles.input}
-          />
-
-          <button onClick={verificarSenhaProfessor} style={styles.primaryButton}>
-            Entrar no painel
-          </button>
-
-          <p style={styles.mensagem}>{mensagem}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // ✅ PAINEL PREMIUM
   return (
-    <div style={styles.page}>
-      <div style={styles.container}>
-        <div style={styles.hero}>
+    <main style={styles.page}>
+      <header style={styles.header}>
+        <div style={styles.brandBox}>
+          <img src="/logo.jpg" alt="Marcos Private English Lessons" style={styles.logo} />
           <div>
-            <div style={styles.heroBadge}>Painel premium</div>
-            <h1 style={styles.header}>👨‍🏫 Painel do Professor</h1>
+            <h1 style={styles.title}>Teacher Dashboard</h1>
             <p style={styles.subtitle}>
-              Visual premium com métricas, agrupamento por aluno e correção automática
+              Marcos Private English Lessons · Learn English Since 2011
             </p>
           </div>
-
-          <div style={styles.topButtons}>
-            <button onClick={carregarProvas} style={styles.primaryButton}>
-              🔄 Atualizar
-            </button>
-
-            <button onClick={sair} style={styles.logoutButton}>
-              Sair
-            </button>
-          </div>
         </div>
 
-        {/* 📊 RESUMO */}
-        <div style={styles.summaryGrid}>
-          <div style={styles.summaryCard}>
-            <div style={styles.summaryLabel}>Total de provas</div>
-            <div style={styles.summaryNumber}>{totalProvas}</div>
+        <button onClick={loadDashboardData} style={styles.refreshButton}>
+          Refresh
+        </button>
+      </header>
+
+      <nav style={styles.tabs}>
+        <TabButton label="Dashboard" tab="dashboard" activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabButton label="Exams" tab="exams" activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabButton label="Corrections" tab="corrections" activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabButton label="Submissions" tab="submissions" activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabButton label="Students" tab="students" activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabButton label="Reports" tab="reports" activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabButton label="Settings" tab="settings" activeTab={activeTab} setActiveTab={setActiveTab} />
+      </nav>
+
+      {activeTab === "dashboard" && (
+        <section>
+          <div style={styles.statsGrid}>
+            <StatCard label="Total Submissions" value={stats.totalSubmissions} />
+            <StatCard label="Unique Students" value={stats.uniqueStudents} />
+            <StatCard label="Completed Corrections" value={stats.completed} />
+            <StatCard label="Average Score" value={`${stats.averageScore}/10`} />
           </div>
 
-          <div style={styles.summaryCard}>
-            <div style={styles.summaryLabel}>Alunos únicos</div>
-            <div style={styles.summaryNumber}>{totalAlunos}</div>
-          </div>
-
-          <div style={styles.summaryCard}>
-            <div style={styles.summaryLabel}>Média geral</div>
-            <div style={styles.summaryNumber}>{mediaPercentual}%</div>
-          </div>
-        </div>
-
-        {/* 🔎 FILTRO */}
-        <div style={styles.filterCard}>
-          <input
-            type="text"
-            placeholder="Filtrar por aluno..."
-            value={filtroAluno}
-            onChange={(e) => setFiltroAluno(e.target.value)}
-            style={styles.filterInput}
-          />
-        </div>
-
-        {carregando && <p style={styles.center}>Carregando provas...</p>}
-
-        {!carregando && dados.length === 0 && (
-          <p style={styles.center}>Nenhuma prova enviada ainda.</p>
-        )}
-
-        {!carregando && dados.length > 0 && dadosFiltrados.length === 0 && (
-          <p style={styles.center}>Nenhum aluno encontrado nesse filtro.</p>
-        )}
-
-        <div style={styles.grid}>
-          {Object.entries(estrutura).map(([aluno, provas]) => (
-            <div key={aluno} style={styles.alunoCard}>
-              <div style={styles.alunoHeader}>
-                <h2 style={styles.alunoTitulo}>📁 {aluno}</h2>
-                <span style={styles.alunoChip}>
-                  {provas.length} prova(s)
-                </span>
+          <div style={styles.card}>
+            <div style={styles.cardHeader}>
+              <div>
+                <h2 style={styles.cardTitle}>Recent Activity</h2>
+                <p style={styles.muted}>Latest student submissions and corrections.</p>
               </div>
 
-              <div style={styles.provasList}>
-                {provas.map((item: any) => {
-                  const resultado = corrigir(item.answers || {});
-                  const aprovado = resultado.percentual >= 50;
+              <button onClick={() => goTo("/admin/corrections")} style={styles.primaryButton}>
+                Open Corrections
+              </button>
+            </div>
 
-                  return (
-                    <div key={item.id} style={styles.provaCard}>
-                      <div style={styles.provaHeader}>
-                        <h3 style={styles.provaTitulo}>📄 {item.exam_name}</h3>
-                        <span
-                          style={{
-                            ...styles.badgeNota,
-                            background: aprovado ? "#16a34a" : "#dc2626"
-                          }}
-                        >
-                          {resultado.percentual}%
-                        </span>
-                      </div>
+            {loading && <p style={styles.muted}>Loading...</p>}
+            {!loading && submissions.length === 0 && <p style={styles.muted}>No submissions yet.</p>}
 
-                      <div style={styles.infoGrid}>
-                        <div style={styles.infoItem}>
-                          <span style={styles.infoLabel}>Livro</span>
-                          <span style={styles.infoValue}>📚 {item.book_name}</span>
-                        </div>
+            {submissions.slice(0, 8).map((submission) => (
+              <div key={submission.id} style={styles.activityItem}>
+                <div>
+                  <strong>{submission.student_name || "Unnamed Student"}</strong>
+                  <p style={styles.muted}>
+                    {submission.exam_name || submission.book_name || "Exam"} ·{" "}
+                    {submission.protocol || submission.id}
+                  </p>
+                </div>
 
-                        <div style={styles.infoItem}>
-                          <span style={styles.infoLabel}>Pasta</span>
-                          <span style={styles.infoValue}>📂 {item.unit_folder}</span>
-                        </div>
-
-                        <div style={styles.infoItem}>
-                          <span style={styles.infoLabel}>Subpasta</span>
-                          <span style={styles.infoValue}>📂 {item.subfolder_name}</span>
-                        </div>
-
-                        <div style={styles.infoItem}>
-                          <span style={styles.infoLabel}>Enviado em</span>
-                          <span style={styles.infoValue}>
-                            📅 {new Date(item.created_at).toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div style={styles.notaLinha}>
-                        <span style={styles.notaTitulo}>Desempenho</span>
-                        <strong
-                          style={{
-                            color: aprovado ? "#166534" : "#991b1b",
-                            fontSize: "16px"
-                          }}
-                        >
-                          {resultado.nota}/{resultado.total}
-                        </strong>
-                      </div>
-
-                      <div style={styles.progressTrack}>
-                        <div
-                          style={{
-                            ...styles.progressFill,
-                            width: `${resultado.percentual}%`,
-                            background: aprovado ? "#16a34a" : "#dc2626"
-                          }}
-                        />
-                      </div>
-
-                      <div style={styles.answersBox}>
-                        <div style={styles.answersTitle}>Respostas</div>
-                        <div style={styles.answerRow}>
-                          <span style={styles.answerLabel}>Pergunta 1</span>
-                          <span style={styles.answerValue}>
-                            {item.answers?.pergunta1 || "-"}
-                          </span>
-                        </div>
-                        <div style={styles.answerRow}>
-                          <span style={styles.answerLabel}>Pergunta 2</span>
-                          <span style={styles.answerValue}>
-                            {item.answers?.pergunta2 || "-"}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div style={styles.deleteRow}>
-                        <button
-                          onClick={() => apagarProva(item.id)}
-                          style={styles.deleteButton}
-                        >
-                          🗑️ Apagar esta prova
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                <div style={styles.activityRight}>
+                  {submission.correction_completed ? (
+                    <span style={styles.completedBadge}>
+                      Score {submission.final_score ?? "-"} / 10
+                    </span>
+                  ) : (
+                    <span style={styles.pendingBadge}>Pending</span>
+                  )}
+                </div>
               </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {activeTab === "exams" && (
+        <SectionCard
+          title="Exams"
+          description="Create exams, manage collections, books, folders, slots, PDFs, answer keys, and student links."
+          actions={[
+            {
+              label: "Open Exams Manager",
+              description: "Collections → Books → Folders → Slots → Exams.",
+              onClick: () => goTo("/admin/exams"),
+            },
+            {
+              label: "PDF and Answer Key Importer",
+              description: "OCR, paste text, import Student PDF, and import Teacher PDF.",
+              onClick: () => goTo("/admin/exams"),
+            },
+          ]}
+        />
+      )}
+
+      {activeTab === "corrections" && (
+        <SectionCard
+          title="Corrections"
+          description="Review student answers, add teacher comments, AI feedback, final scores, result links, PDF reports, and WhatsApp sharing."
+          actions={[
+            {
+              label: "Open Intelligent Corrections",
+              description: "Correct submissions, finalize scores, generate PDF, and copy result links.",
+              onClick: () => goTo("/admin/corrections"),
+            },
+            {
+              label: "View All Submissions",
+              description: "Open the submissions list.",
+              onClick: () => goTo("/admin/submissions"),
+            },
+          ]}
+        />
+      )}
+
+      {activeTab === "submissions" && (
+        <section style={styles.card}>
+          <div style={styles.cardHeader}>
+            <div>
+              <h2 style={styles.cardTitle}>Submissions</h2>
+              <p style={styles.muted}>Recent student submissions.</p>
+            </div>
+
+            <button onClick={() => goTo("/admin/submissions")} style={styles.primaryButton}>
+              Open Submissions Page
+            </button>
+          </div>
+
+          {submissions.map((submission) => (
+            <div key={submission.id} style={styles.activityItem}>
+              <div>
+                <strong>{submission.student_name || "Unnamed Student"}</strong>
+                <p style={styles.muted}>Email: {submission.student_email || "Not provided"}</p>
+                <p style={styles.muted}>Protocol: {submission.protocol || submission.id}</p>
+              </div>
+
+              <button onClick={() => goTo("/admin/corrections")} style={styles.secondaryButton}>
+                Review
+              </button>
             </div>
           ))}
-        </div>
-      </div>
+        </section>
+      )}
+
+      {activeTab === "students" && (
+        <SectionCard
+          title="Students"
+          description="Student records and history will be centralized here. For now, use submissions and corrections to view student activity."
+          actions={[
+            {
+              label: "Open Corrections",
+              description: "View students through submitted exams.",
+              onClick: () => goTo("/admin/corrections"),
+            },
+          ]}
+        />
+      )}
+
+      {activeTab === "reports" && (
+        <SectionCard
+          title="Reports"
+          description="Performance reports, PDF reports, result links, and study recommendations."
+          actions={[
+            {
+              label: "Generate Reports from Corrections",
+              description: "Finalize corrections and generate PDF reports.",
+              onClick: () => goTo("/admin/corrections"),
+            },
+          ]}
+        />
+      )}
+
+      {activeTab === "settings" && (
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>Settings</h2>
+
+          <div style={styles.settingsGrid}>
+            <div style={styles.settingBox}>
+              <strong>Official Language</strong>
+              <p>English (US)</p>
+            </div>
+
+            <div style={styles.settingBox}>
+              <strong>Brand Name</strong>
+              <p>Marcos Private English Lessons</p>
+            </div>
+
+            <div style={styles.settingBox}>
+              <strong>Report Style</strong>
+              <p>No Pass/Fail status. Use performance-focused feedback.</p>
+            </div>
+
+            <div style={styles.settingBox}>
+              <strong>PDF Report</strong>
+              <p>Logo, header, final score, QR/result link, teacher signature.</p>
+            </div>
+          </div>
+        </section>
+      )}
+    </main>
+  );
+}
+
+function TabButton({
+  label,
+  tab,
+  activeTab,
+  setActiveTab,
+}: {
+  label: string;
+  tab: TabKey;
+  activeTab: TabKey;
+  setActiveTab: (tab: TabKey) => void;
+}) {
+  return (
+    <button
+      onClick={() => setActiveTab(tab)}
+      style={{
+        ...styles.tabButton,
+        ...(activeTab === tab ? styles.activeTabButton : {}),
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div style={styles.statCard}>
+      <strong>{value}</strong>
+      <span>{label}</span>
     </div>
+  );
+}
+
+function SectionCard({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description: string;
+  actions: Array<{
+    label: string;
+    description: string;
+    onClick: () => void;
+  }>;
+}) {
+  return (
+    <section style={styles.card}>
+      <h2 style={styles.cardTitle}>{title}</h2>
+      <p style={styles.muted}>{description}</p>
+
+      <div style={styles.actionGrid}>
+        {actions.map((action) => (
+          <button key={action.label} onClick={action.onClick} style={styles.actionCard}>
+            <strong>{action.label}</strong>
+            <span>{action.description}</span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
 const styles: any = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(135deg, #eef2ff, #ffffff)",
-    padding: "36px",
-  },
-
-  container: {
-    maxWidth: "1100px",
-    margin: "0 auto",
+    background: "#f8fafc",
+    padding: "28px",
     fontFamily: "Arial, sans-serif",
-  },
-
-  hero: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "20px",
-    flexWrap: "wrap",
-    marginBottom: "28px",
-  },
-
-  heroBadge: {
-    display: "inline-block",
-    background: "#dbeafe",
-    color: "#1d4ed8",
-    padding: "6px 12px",
-    borderRadius: "999px",
-    fontWeight: "bold",
-    fontSize: "12px",
-    marginBottom: "10px",
+    color: "#111827",
   },
 
   header: {
-    margin: 0,
-    fontSize: "36px",
-    color: "#111827",
-  },
-
-  subtitle: {
-    marginTop: "10px",
-    color: "#6b7280",
-    fontSize: "15px",
-  },
-
-  topButtons: {
-    display: "flex",
-    gap: "12px",
-    flexWrap: "wrap",
-  },
-
-  summaryGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "18px",
-    marginBottom: "24px",
-  },
-
-  summaryCard: {
-    background: "#ffffff",
+    background: "#fff",
     borderRadius: "18px",
-    padding: "18px",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
-    border: "1px solid #e5e7eb",
-  },
-
-  summaryLabel: {
-    color: "#6b7280",
-    fontSize: "14px",
-    marginBottom: "8px",
-  },
-
-  summaryNumber: {
-    fontSize: "30px",
-    fontWeight: "800",
-    color: "#111827",
-  },
-
-  filterCard: {
-    background: "#ffffff",
-    borderRadius: "18px",
-    padding: "16px",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.05)",
-    border: "1px solid #e5e7eb",
-    marginBottom: "24px",
-  },
-
-  filterInput: {
-    width: "100%",
-    padding: "12px 14px",
-    borderRadius: "10px",
-    border: "1px solid #d1d5db",
-    fontSize: "15px",
-    outline: "none",
-  },
-
-  grid: {
-    display: "grid",
-    gap: "24px",
-  },
-
-  alunoCard: {
-    background: "#ffffff",
-    borderRadius: "20px",
-    padding: "22px",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.08)",
-    border: "1px solid #e5e7eb",
-  },
-
-  alunoHeader: {
+    padding: "20px",
+    marginBottom: "18px",
+    boxShadow: "0 8px 22px rgba(15,23,42,0.08)",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: "12px",
-    flexWrap: "wrap",
-    marginBottom: "16px",
-  },
-
-  alunoTitulo: {
-    margin: 0,
-    fontSize: "24px",
-    color: "#111827",
-  },
-
-  alunoChip: {
-    background: "#f3f4f6",
-    color: "#111827",
-    padding: "6px 12px",
-    borderRadius: "999px",
-    fontSize: "13px",
-    fontWeight: "bold",
-  },
-
-  provasList: {
-    display: "grid",
     gap: "16px",
   },
 
-  provaCard: {
-    background: "#f8fafc",
+  brandBox: {
+    display: "flex",
+    alignItems: "center",
+    gap: "16px",
+  },
+
+  logo: {
+    width: "72px",
+    height: "72px",
+    objectFit: "contain",
+    borderRadius: "12px",
+    background: "#fff",
+  },
+
+  title: {
+    margin: 0,
+    fontSize: "30px",
+  },
+
+  subtitle: {
+    margin: "6px 0 0",
+    color: "#64748b",
+  },
+
+  refreshButton: {
+    background: "#0f172a",
+    color: "#fff",
+    border: "none",
+    borderRadius: "10px",
+    padding: "12px 16px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  tabs: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "10px",
+    marginBottom: "18px",
+  },
+
+  tabButton: {
+    border: "1px solid #cbd5e1",
+    background: "#fff",
+    color: "#334155",
+    padding: "11px 14px",
+    borderRadius: "999px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  activeTabButton: {
+    background: "#2563eb",
+    color: "#fff",
+    border: "1px solid #2563eb",
+  },
+
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "14px",
+    marginBottom: "18px",
+  },
+
+  statCard: {
+    background: "#fff",
     borderRadius: "16px",
     padding: "18px",
-    border: "1px solid #e5e7eb",
-  },
-
-  provaHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "10px",
-    flexWrap: "wrap",
-    marginBottom: "14px",
-  },
-
-  provaTitulo: {
-    margin: 0,
-    fontSize: "18px",
-    color: "#111827",
-  },
-
-  badgeNota: {
-    color: "#fff",
-    padding: "6px 10px",
-    borderRadius: "999px",
-    fontWeight: "bold",
-    fontSize: "13px",
-  },
-
-  infoGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "12px",
-    marginBottom: "14px",
-  },
-
-  infoItem: {
-    background: "#ffffff",
-    borderRadius: "12px",
-    padding: "12px",
-    border: "1px solid #e5e7eb",
+    boxShadow: "0 8px 22px rgba(15,23,42,0.08)",
     display: "flex",
     flexDirection: "column",
     gap: "6px",
   },
 
-  infoLabel: {
-    color: "#6b7280",
-    fontSize: "12px",
-    fontWeight: "bold",
-    textTransform: "uppercase",
-  },
-
-  infoValue: {
-    color: "#111827",
-    fontSize: "14px",
-    fontWeight: 600,
-  },
-
-  notaLinha: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: "8px",
-    marginBottom: "10px",
-  },
-
-  notaTitulo: {
-    color: "#374151",
-    fontWeight: "bold",
-  },
-
-  progressTrack: {
-    width: "100%",
-    height: "10px",
-    borderRadius: "999px",
-    background: "#e5e7eb",
-    overflow: "hidden",
-    marginBottom: "16px",
-  },
-
-  progressFill: {
-    height: "100%",
-    borderRadius: "999px",
-  },
-
-  answersBox: {
-    background: "#e0e7ff",
-    borderRadius: "12px",
-    padding: "14px",
-  },
-
-  answersTitle: {
-    fontWeight: "bold",
-    marginBottom: "10px",
-    color: "#1e3a8a",
-  },
-
-  answerRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "10px",
-    padding: "8px 0",
-    borderBottom: "1px solid rgba(30,58,138,0.08)",
-  },
-
-  answerLabel: {
-    fontWeight: "bold",
-    color: "#374151",
-  },
-
-  answerValue: {
-    color: "#111827",
-  },
-
-  deleteRow: {
-    marginTop: "14px",
-    display: "flex",
-    justifyContent: "flex-end",
-  },
-
-  deleteButton: {
-    padding: "10px 14px",
-    background: "#dc2626",
-    color: "#fff",
-    border: "none",
-    borderRadius: "10px",
-    cursor: "pointer",
-    fontWeight: "bold",
-  },
-
-  center: {
-    textAlign: "center",
-    marginTop: "20px",
-    color: "#6b7280",
-  },
-
-  loginWrapper: {
-    minHeight: "100vh",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    background: "linear-gradient(135deg, #eef2ff, #f8fafc)",
-    fontFamily: "Arial, sans-serif",
-  },
-
-  loginCard: {
-    background: "#ffffff",
-    padding: "32px",
+  card: {
+    background: "#fff",
     borderRadius: "18px",
-    width: "100%",
-    maxWidth: "380px",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.08)",
-    border: "1px solid #e5e7eb",
+    padding: "22px",
+    boxShadow: "0 8px 22px rgba(15,23,42,0.08)",
+    marginBottom: "18px",
   },
 
-  loginTopBadge: {
-    display: "inline-block",
-    background: "#e0e7ff",
-    color: "#1e3a8a",
-    padding: "6px 12px",
-    borderRadius: "999px",
-    fontWeight: "bold",
-    fontSize: "12px",
+  cardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "16px",
+    alignItems: "center",
     marginBottom: "12px",
   },
 
-  loginTitle: {
-    textAlign: "center",
-    marginTop: 0,
-    marginBottom: "12px",
-    color: "#111827",
+  cardTitle: {
+    margin: "0 0 8px",
   },
 
-  loginSubtitle: {
-    textAlign: "center",
-    color: "#6b7280",
-    marginBottom: "16px",
-  },
-
-  input: {
-    width: "100%",
-    padding: "12px",
-    borderRadius: "10px",
-    border: "1px solid #d1d5db",
-    fontSize: "15px",
-    outline: "none",
+  muted: {
+    color: "#64748b",
+    margin: "4px 0",
   },
 
   primaryButton: {
-    padding: "12px 16px",
     background: "#2563eb",
     color: "#fff",
     border: "none",
     borderRadius: "10px",
+    padding: "11px 14px",
     cursor: "pointer",
     fontWeight: "bold",
   },
 
-  logoutButton: {
-    padding: "12px 16px",
-    background: "#111827",
+  secondaryButton: {
+    background: "#475569",
     color: "#fff",
     border: "none",
     borderRadius: "10px",
+    padding: "10px 12px",
     cursor: "pointer",
     fontWeight: "bold",
   },
 
-  mensagem: {
-    marginTop: "12px",
-    textAlign: "center",
+  activityItem: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "14px",
+    padding: "14px",
+    marginBottom: "10px",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "14px",
+    alignItems: "center",
+    background: "#f9fafb",
+  },
+
+  activityRight: {
+    whiteSpace: "nowrap",
+  },
+
+  completedBadge: {
+    background: "#dcfce7",
+    color: "#166534",
+    borderRadius: "999px",
+    padding: "8px 10px",
     fontWeight: "bold",
+  },
+
+  pendingBadge: {
+    background: "#fef3c7",
+    color: "#92400e",
+    borderRadius: "999px",
+    padding: "8px 10px",
+    fontWeight: "bold",
+  },
+
+  actionGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: "14px",
+    marginTop: "16px",
+  },
+
+  actionCard: {
+    textAlign: "left",
+    background: "#f8fafc",
+    border: "1px solid #e5e7eb",
+    borderRadius: "16px",
+    padding: "18px",
+    cursor: "pointer",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    color: "#111827",
+  },
+
+  settingsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+    gap: "14px",
+  },
+
+  settingBox: {
+    background: "#f8fafc",
+    border: "1px solid #e5e7eb",
+    borderRadius: "14px",
+    padding: "16px",
   },
 };
