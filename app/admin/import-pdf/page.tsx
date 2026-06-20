@@ -72,12 +72,19 @@ export default function ImportPdfPage() {
   }
 
   function isOptionLine(line: string) {
-    return /^[a-e][\).]\s+/.test(line);
+    return /^[A-Ea-e][\).]\s+/.test(line);
   }
 
   function parseOption(line: string) {
     const letter = line.charAt(0).toLowerCase();
-    const text = cleanLine(line.slice(2));
+
+    const text = cleanLine(
+      line
+        .slice(1)
+        .replace(/^[\).]\s*/, "")
+        .replace(/^\s+/, "")
+    );
+
     return { letter, text };
   }
 
@@ -648,32 +655,60 @@ export default function ImportPdfPage() {
   function extractEmbeddedOptions(text: string): ExtractedOptions | null {
     const normalized = cleanLine(text);
 
+    /*
+      SBS Premium:
+      Reconhece alternativas mesmo quando o OCR transforma:
+
+      a. option
+      b. option
+
+      A. option
+      B. option
+
+      A) option
+      B) option
+
+      A option
+      B option
+
+      tudo na mesma linha.
+    */
+
+    const expanded = normalized
+      .replace(/\s([A-Ea-e])\s+(?=[A-Z0-9"'])/g, " $1. ")
+      .replace(/\s([A-Ea-e])\)(?=\s*[A-Z0-9"'])/g, " $1. ")
+      .replace(/\s([A-Ea-e])\.(?=\s*[A-Z0-9"'])/g, " $1. ");
+
     const markers: Array<{ letter: string; index: number; length: number }> = [];
-    const regex = /(?:^|\s)([a-e])[\).]\s+/g;
+    const regex = /(?:^|\s)([A-Ea-e])[\).]\s+/g;
     let match: RegExpExecArray | null;
 
-    while ((match = regex.exec(normalized)) !== null) {
+    while ((match = regex.exec(expanded)) !== null) {
       const markerText = match[0];
       const letter = match[1].toLowerCase();
-      const index = match.index + markerText.search(/[a-e]/i);
+
+      const letterPositionInsideMarker = markerText.search(/[A-Ea-e]/);
+      const index = match.index + letterPositionInsideMarker;
+      const length = markerText.length - letterPositionInsideMarker;
+
       markers.push({
         letter,
         index,
-        length: markerText.length - markerText.search(/[a-e]/i),
+        length,
       });
     }
 
-    const required = ["a", "b", "c", "d"];
-    const hasRequired = required.every((letter) =>
-      markers.some((marker) => marker.letter === letter)
-    );
+    const sequence = findBestOptionSequence(markers);
 
-    if (!hasRequired) return null;
+    if (!sequence) return null;
 
-    const firstA = markers.find((marker) => marker.letter === "a");
-    if (!firstA || firstA.index < 8) return null;
+    const firstA = sequence[0];
 
-    const questionText = cleanLine(normalized.slice(0, firstA.index));
+    if (firstA.index < 5) return null;
+
+    const questionText = cleanLine(expanded.slice(0, firstA.index));
+
+    if (!questionText || questionText.length < 3) return null;
 
     const result: ExtractedOptions = {
       questionText,
@@ -684,12 +719,16 @@ export default function ImportPdfPage() {
       e: null,
     };
 
-    markers.forEach((marker, position) => {
+    sequence.forEach((marker, position) => {
       const start = marker.index + marker.length;
       const end =
-        position + 1 < markers.length ? markers[position + 1].index : normalized.length;
+        position + 1 < sequence.length
+          ? sequence[position + 1].index
+          : expanded.length;
 
-      const optionText = cleanLine(normalized.slice(start, end));
+      const optionText = cleanLine(expanded.slice(start, end));
+
+      if (!optionText) return;
 
       if (marker.letter === "a") result.a = optionText;
       if (marker.letter === "b") result.b = optionText;
@@ -698,7 +737,45 @@ export default function ImportPdfPage() {
       if (marker.letter === "e") result.e = optionText;
     });
 
+    if (!result.a || !result.b || !result.c || !result.d) return null;
+
     return result;
+  }
+
+  function findBestOptionSequence(
+    markers: Array<{ letter: string; index: number; length: number }>
+  ) {
+    if (markers.length < 4) return null;
+
+    const letters = ["a", "b", "c", "d", "e"];
+
+    for (let i = 0; i < markers.length; i++) {
+      if (markers[i].letter !== "a") continue;
+
+      const sequence = [markers[i]];
+      let expectedIndex = 1;
+
+      for (let j = i + 1; j < markers.length; j++) {
+        if (markers[j].letter === letters[expectedIndex]) {
+          sequence.push(markers[j]);
+          expectedIndex++;
+
+          if (expectedIndex >= 4) {
+            if (
+              expectedIndex < letters.length &&
+              j + 1 < markers.length &&
+              markers[j + 1].letter === letters[expectedIndex]
+            ) {
+              sequence.push(markers[j + 1]);
+            }
+
+            return sequence;
+          }
+        }
+      }
+    }
+
+    return null;
   }
 
   function mergeBrokenOptionBlocks(items: ExamBlockDraft[]) {
