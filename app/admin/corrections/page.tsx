@@ -144,7 +144,7 @@ export default function CorrectionsPage() {
       const reviewMap: Record<string, Review> = {};
 
       (savedReviews || []).forEach((row: any) => {
-        const key = row.question_id || String(row.question_number || "");
+        const key = String(row.question_number || row.question_id || "");
         reviewMap[key] = {
           id: row.id,
           teacher_comment: row.teacher_comment || "",
@@ -203,7 +203,7 @@ export default function CorrectionsPage() {
   }
 
   function getReviewKey(question: Question) {
-    return question.id || String(question.question_number || "");
+    return String(question.question_number || question.id || "");
   }
 
   function updateReview(question: Question, field: keyof Review, value: string | boolean) {
@@ -231,7 +231,7 @@ export default function CorrectionsPage() {
     const payload: any = {
       submission_id: selectedSubmission.id,
       exam_id: selectedSubmission.exam_id || null,
-      question_id: question.id || null,
+      question_id: null,
       question_number: question.question_number || null,
       student_answer: studentAnswer || "",
       is_correct: correct,
