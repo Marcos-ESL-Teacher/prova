@@ -54,6 +54,7 @@ export default function ExamsAdminPage() {
   const [saving, setSaving] = useState(false);
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrStatus, setOcrStatus] = useState("");
+  const [answerKeyStatus, setAnswerKeyStatus] = useState("");
   const [parserMode, setParserMode] = useState<ParserMode>("sbs");
   const [ocrMode, setOcrMode] = useState<OcrMode>("columns");
   const [showImporter, setShowImporter] = useState(false);
@@ -360,6 +361,7 @@ ${link}`);
     setRawText("");
     setBlocks([]);
     setOcrStatus("");
+    setAnswerKeyStatus("");
     setOcrRunning(false);
     setSaving(false);
   }
@@ -597,6 +599,201 @@ ${link}`);
     } finally {
       setOcrRunning(false);
     }
+  }
+
+
+  async function extractTextFromTeacherPdf(file: File) {
+    try {
+      if (!provaSelecionada?.id) {
+        alert("Selecione uma prova antes de importar o espelho.");
+        return;
+      }
+
+      setAnswerKeyStatus("Lendo Teacher PDF / espelho...");
+
+      const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/legacy/build/pdf.worker.mjs",
+        import.meta.url
+      ).toString();
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+      let fullText = "";
+
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+        setAnswerKeyStatus(`Lendo espelho página ${pageNumber}/${pdf.numPages}...`);
+
+        const page = await pdf.getPage(pageNumber);
+        const textContent = await page.getTextContent();
+
+        const pageText = textContent.items
+          .map((item: any) => item.str || "")
+          .join(" ");
+
+        fullText += `\n\n--- PAGE ${pageNumber} ---\n\n${pageText}`;
+      }
+
+      const answers = parseTeacherAnswerKey(fullText);
+
+      if (answers.length === 0) {
+        setAnswerKeyStatus(
+          "Nenhuma resposta encontrada. Verifique se o PDF tem padrão ANS: ou Answer Strip."
+        );
+        return;
+      }
+
+      await applyAnswerKeyToExamBlocks(answers);
+
+      setAnswerKeyStatus(
+        `Espelho importado com sucesso: ${answers.length} respostas aplicadas.`
+      );
+
+      alert(`Espelho importado: ${answers.length} respostas aplicadas.`);
+    } catch (error: any) {
+      alert("Erro ao importar espelho: " + (error?.message || String(error)));
+      setAnswerKeyStatus("Erro ao importar Teacher PDF / espelho.");
+    }
+  }
+
+  function parseTeacherAnswerKey(text: string) {
+    const cleaned = text
+      .replace(/\r/g, "\n")
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .replace(/\u00a0/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const answerMap = new Map<
+      number,
+      {
+        questionNumber: number;
+        correctAnswer: string;
+        points: number;
+      }
+    >();
+
+    /*
+      Padrão principal dos PDFs Teacher:
+      1. ANS: experienced PTS: 1
+      41. ANS: were playing, took PTS: 2
+    */
+    const mainRegex =
+      /(?:^|\s)(\d{1,3})\.\s*ANS:\s*([\s\S]*?)(?=\s+PTS:\s*\d|\s+\d{1,3}\.\s*ANS:|$)/g;
+
+    let match: RegExpExecArray | null;
+
+    while ((match = mainRegex.exec(cleaned)) !== null) {
+      const questionNumber = Number(match[1]);
+      let correctAnswer = cleanAnswerKeyValue(match[2]);
+      const after = cleaned.slice(match.index, match.index + 500);
+      const pointsMatch = after.match(/PTS:\s*(\d+(?:\.\d+)?)/);
+      const points = pointsMatch ? Number(pointsMatch[1]) : 1;
+
+      if (!questionNumber || !correctAnswer) continue;
+
+      answerMap.set(questionNumber, {
+        questionNumber,
+        correctAnswer,
+        points,
+      });
+    }
+
+    /*
+      Padrão Answer Strip:
+      _____ 21. C
+      _____ 22. A
+    */
+    const stripRegex = /_{2,}\s*(\d{1,3})\.\s*([A-Ea-eTFtf])(?:\s|$)/g;
+
+    while ((match = stripRegex.exec(cleaned)) !== null) {
+      const questionNumber = Number(match[1]);
+      const correctAnswer = match[2].toUpperCase();
+
+      if (!questionNumber || !correctAnswer) continue;
+
+      if (!answerMap.has(questionNumber)) {
+        answerMap.set(questionNumber, {
+          questionNumber,
+          correctAnswer,
+          points: 1,
+        });
+      }
+    }
+
+    return Array.from(answerMap.values()).sort(
+      (a, b) => a.questionNumber - b.questionNumber
+    );
+  }
+
+  function cleanAnswerKeyValue(value: string) {
+    let answer = cleanLine(value)
+      .replace(/\s*REF:.*$/i, "")
+      .replace(/\s*OBJ:.*$/i, "")
+      .replace(/\s*TOP:.*$/i, "")
+      .replace(/\s*ID:.*$/i, "")
+      .replace(/\s*Name:.*$/i, "")
+      .replace(/\s*Answer Section.*$/i, "")
+      .replace(/\s*Life\s*-\s*Book.*$/i, "")
+      .trim();
+
+    /*
+      Quando o Teacher PDF traz alternativas aceitas em linhas separadas:
+      56. ANS:
+      ship
+      ferry
+      boat
+      PTS: 1
+
+      O texto extraído pode virar "ship ferry boat".
+      Para casos conhecidos, mantemos múltiplas respostas usando " | ".
+      O corretor aceita qualquer item separado por "|".
+    */
+    const commonMultipleAnswers: Record<string, string> = {
+      "ship ferry boat": "ship | ferry | boat",
+      "fell slipped": "fell | slipped",
+    };
+
+    const lower = answer.toLowerCase();
+
+    if (commonMultipleAnswers[lower]) {
+      answer = commonMultipleAnswers[lower];
+    }
+
+    return answer;
+  }
+
+  async function applyAnswerKeyToExamBlocks(
+    answers: Array<{ questionNumber: number; correctAnswer: string; points: number }>
+  ) {
+    if (!provaSelecionada?.id) {
+      throw new Error("Nenhuma prova selecionada.");
+    }
+
+    let updated = 0;
+
+    for (const item of answers) {
+      const { error } = await supabase
+        .from("exam_blocks")
+        .update({
+          correct_answer: item.correctAnswer,
+          points: item.points || 1,
+        })
+        .eq("exam_id", provaSelecionada.id)
+        .eq("block_type", "question")
+        .eq("question_number", item.questionNumber);
+
+      if (error) {
+        throw error;
+      }
+
+      updated++;
+    }
+
+    return updated;
   }
 
   function makeHeaderBlock(title: string, sort: number): ExamBlockDraft {
@@ -1587,6 +1784,26 @@ ${link}`);
             {ocrStatus && <div style={styles.statusBox}>{ocrStatus}</div>}
           </div>
 
+          <div style={styles.teacherBox}>
+            <h3>📘 Espelho / Teacher PDF — Gabarito oficial</h3>
+            <p>
+              Use esta opção para importar o PDF do professor. O sistema lê o padrão
+              <strong> ANS:</strong> e grava as respostas em <strong>correct_answer</strong>.
+            </p>
+
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) extractTextFromTeacherPdf(file);
+              }}
+              style={styles.input}
+            />
+
+            {answerKeyStatus && <div style={styles.answerKeyStatusBox}>{answerKeyStatus}</div>}
+          </div>
+
           <div style={styles.uploadBox}>
             <h3>Opção B — Colar texto extraído manualmente</h3>
             <p>Use esta opção quando você conseguir copiar texto do PDF.</p>
@@ -2138,6 +2355,24 @@ const styles: any = {
     padding: "16px",
     borderRadius: "12px",
     marginBottom: "18px",
+  },
+
+  teacherBox: {
+    border: "1px solid #bbf7d0",
+    background: "#f0fdf4",
+    padding: "16px",
+    borderRadius: "12px",
+    marginBottom: "18px",
+  },
+
+  answerKeyStatusBox: {
+    marginTop: "10px",
+    background: "#dcfce7",
+    color: "#166534",
+    border: "1px solid #86efac",
+    padding: "12px",
+    borderRadius: "10px",
+    fontWeight: "bold",
   },
 
   statusBox: {
