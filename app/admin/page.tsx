@@ -10,6 +10,7 @@ type TabKey =
   | "submissions"
   | "students"
   | "reports"
+  | "pdfReports"
   | "settings";
 
 type Submission = {
@@ -109,6 +110,7 @@ export default function TeacherDashboardPage() {
         <TabButton label="Submissions" tab="submissions" activeTab={activeTab} setActiveTab={setActiveTab} />
         <TabButton label="Students" tab="students" activeTab={activeTab} setActiveTab={setActiveTab} />
         <TabButton label="Reports" tab="reports" activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabButton label="PDF Reports" tab="pdfReports" activeTab={activeTab} setActiveTab={setActiveTab} />
         <TabButton label="Settings" tab="settings" activeTab={activeTab} setActiveTab={setActiveTab} />
       </nav>
 
@@ -254,6 +256,82 @@ export default function TeacherDashboardPage() {
             },
           ]}
         />
+      )}
+
+      {activeTab === "pdfReports" && (
+        <section style={styles.card}>
+          <div style={styles.cardHeader}>
+            <div>
+              <h2 style={styles.cardTitle}>Professional PDF Reports</h2>
+              <p style={styles.muted}>
+                Generate student performance reports with logo, professional header,
+                final score, teacher comments, AI feedback, QR/result link, and teacher signature.
+              </p>
+            </div>
+
+            <button onClick={() => goTo("/admin/corrections")} style={styles.primaryButton}>
+              Open Corrections
+            </button>
+          </div>
+
+          <div style={styles.reportPreview}>
+            <div style={styles.reportHeaderPreview}>
+              <img src="/logo.jpg" alt="Marcos Private English Lessons" style={styles.reportLogo} />
+
+              <div>
+                <h3 style={styles.reportTitle}>ENGLISH PERFORMANCE REPORT</h3>
+                <p style={styles.reportSubtitle}>Marcos Private English Lessons</p>
+                <p style={styles.reportSubtitle}>Learn English Since 2011</p>
+              </div>
+            </div>
+
+            <div style={styles.reportGrid}>
+              <div style={styles.reportBox}>
+                <strong>Student Information</strong>
+                <span>Student Name, Book, Folder, Exam, Date, Protocol</span>
+              </div>
+
+              <div style={styles.reportBox}>
+                <strong>Final Score</strong>
+                <span>Automatic score based on the official answer key</span>
+              </div>
+
+              <div style={styles.reportBox}>
+                <strong>Teacher Comments</strong>
+                <span>Personal observations by question or overall performance</span>
+              </div>
+
+              <div style={styles.reportBox}>
+                <strong>QR / Result Link</strong>
+                <span>Share the online result with the student</span>
+              </div>
+
+              <div style={styles.reportBox}>
+                <strong>Teacher Signature</strong>
+                <span>Prof. Marcos Rogério Leitão · Teacher / English Coach</span>
+              </div>
+
+              <div style={styles.reportBox}>
+                <strong>No Pass / Fail</strong>
+                <span>Performance-focused feedback only</span>
+              </div>
+            </div>
+
+            <div style={styles.reportActions}>
+              <button onClick={() => goTo("/admin/corrections")} style={styles.pdfActionButton}>
+                Generate PDF from Corrections
+              </button>
+
+              <button onClick={() => goTo("/admin/corrections")} style={styles.linkActionButton}>
+                Copy Result Link
+              </button>
+
+              <button onClick={() => goTo("/admin/corrections")} style={styles.whatsActionButton}>
+                Send via WhatsApp
+              </button>
+            </div>
+          </div>
+        </section>
       )}
 
       {activeTab === "settings" && (
@@ -540,6 +618,95 @@ const styles: any = {
     flexDirection: "column",
     gap: "8px",
     color: "#111827",
+  },
+
+  reportPreview: {
+    background: "#f8fafc",
+    border: "1px solid #e5e7eb",
+    borderRadius: "18px",
+    padding: "22px",
+    marginTop: "18px",
+  },
+
+  reportHeaderPreview: {
+    display: "flex",
+    alignItems: "center",
+    gap: "16px",
+    borderBottom: "2px solid #111827",
+    paddingBottom: "16px",
+    marginBottom: "18px",
+  },
+
+  reportLogo: {
+    width: "92px",
+    height: "92px",
+    objectFit: "contain",
+    borderRadius: "14px",
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+  },
+
+  reportTitle: {
+    margin: "0 0 6px",
+    letterSpacing: "0.04em",
+  },
+
+  reportSubtitle: {
+    margin: "2px 0",
+    color: "#64748b",
+  },
+
+  reportGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+    gap: "14px",
+  },
+
+  reportBox: {
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: "14px",
+    padding: "16px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+  },
+
+  reportActions: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "10px",
+    marginTop: "18px",
+  },
+
+  pdfActionButton: {
+    background: "#dc2626",
+    color: "#fff",
+    border: "none",
+    borderRadius: "10px",
+    padding: "12px 16px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  linkActionButton: {
+    background: "#0284c7",
+    color: "#fff",
+    border: "none",
+    borderRadius: "10px",
+    padding: "12px 16px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  whatsActionButton: {
+    background: "#16a34a",
+    color: "#fff",
+    border: "none",
+    borderRadius: "10px",
+    padding: "12px 16px",
+    cursor: "pointer",
+    fontWeight: "bold",
   },
 
   settingsGrid: {
