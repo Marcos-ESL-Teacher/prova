@@ -428,6 +428,24 @@ export default function ExamsAdminPage() {
 
                   <button
                     onClick={() => {
+                      window.location.href = `/admin/import-pdf?examId=${p.id}`;
+                    }}
+                    style={styles.importButton}
+                  >
+                    📥 Importar PDF
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      alert("Função preparada para o futuro: aqui entraremos com IA para melhorar o OCR e organizar os blocos automaticamente.");
+                    }}
+                    style={styles.aiButton}
+                  >
+                    🧠 IA Futuro
+                  </button>
+
+                  <button
+                    onClick={() => {
                       window.location.href = `/student/exam-blocks/${p.id}`;
                     }}
                     style={styles.studentButton}
@@ -695,6 +713,24 @@ const styles: any = {
   openButton: {
     padding: "8px 10px",
     background: "#2563eb",
+    color: "#fff",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+  },
+
+  importButton: {
+    padding: "8px 10px",
+    background: "#0f766e",
+    color: "#fff",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+  },
+
+  aiButton: {
+    padding: "8px 10px",
+    background: "#9333ea",
     color: "#fff",
     border: "none",
     borderRadius: "8px",

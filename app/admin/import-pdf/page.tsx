@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
 type ExamBlockDraft = {
@@ -34,6 +34,15 @@ type ExtractedOptions = {
 
 export default function ImportPdfPage() {
   const [examId, setExamId] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const examIdFromUrl = params.get("examId");
+
+    if (examIdFromUrl) {
+      setExamId(examIdFromUrl);
+    }
+  }, []);
   const [rawText, setRawText] = useState("");
   const [blocks, setBlocks] = useState<ExamBlockDraft[]>([]);
   const [saving, setSaving] = useState(false);
@@ -1002,7 +1011,18 @@ export default function ImportPdfPage() {
 
   return (
     <div style={styles.page}>
-      <h1>📥 Importador PDF → exam_blocks</h1>
+      <div style={styles.topBar}>
+        <h1>📥 Importador PDF → exam_blocks</h1>
+
+        <button
+          onClick={() => {
+            window.location.href = "/admin/exams";
+          }}
+          style={styles.backButton}
+        >
+          ⬅ Voltar para Provas
+        </button>
+      </div>
 
       <div style={styles.card}>
         <label style={styles.label}>Exam ID</label>
@@ -1245,6 +1265,24 @@ const styles: any = {
     background: "#f8fafc",
     padding: "30px",
     fontFamily: "Arial, sans-serif",
+  },
+
+  topBar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "16px",
+    marginBottom: "18px",
+  },
+
+  backButton: {
+    padding: "11px 14px",
+    background: "#0f172a",
+    color: "#fff",
+    border: "none",
+    borderRadius: "9px",
+    cursor: "pointer",
+    fontWeight: "bold",
   },
 
   card: {
