@@ -17,6 +17,11 @@ type Submission = {
   exam_id?: string | null;
   score?: number | null;
   total?: number | null;
+  final_score?: number | null;
+  final_percentage?: number | null;
+  correction_completed?: boolean | null;
+  correct_answers?: number | null;
+  wrong_answers?: number | null;
 };
 
 type Question = {
@@ -305,6 +310,272 @@ export default function CorrectionsPage() {
     updateReview(question, "ai_feedback", feedback);
   }
 
+
+  function calculateFinalResult() {
+    if (!selectedSubmission || questions.length === 0) {
+      return {
+        totalQuestions: 0,
+        correctCount: 0,
+        wrongCount: 0,
+        manualCount: 0,
+        percentage: 0,
+        score10: 0,
+      };
+    }
+
+    let correctCount = 0;
+    let wrongCount = 0;
+    let manualCount = 0;
+
+    questions.forEach((question) => {
+      const result = isCorrect(question);
+
+      if (result === true) correctCount++;
+      else if (result === false) wrongCount++;
+      else manualCount++;
+    });
+
+    const totalQuestions = questions.length;
+    const percentage =
+      totalQuestions > 0 ? Number(((correctCount / totalQuestions) * 100).toFixed(2)) : 0;
+    const score10 =
+      totalQuestions > 0 ? Number(((correctCount / totalQuestions) * 10).toFixed(2)) : 0;
+
+    return {
+      totalQuestions,
+      correctCount,
+      wrongCount,
+      manualCount,
+      percentage,
+      score10,
+    };
+  }
+
+  async function finalizeCorrection() {
+    if (!selectedSubmission) {
+      alert("Selecione uma submissão primeiro.");
+      return;
+    }
+
+    if (questions.length === 0) {
+      alert("Nenhuma questão encontrada para finalizar.");
+      return;
+    }
+
+    const result = calculateFinalResult();
+
+    const confirmFinalize = confirm(
+      `Finalizar correção?\n\nAcertos: ${result.correctCount}/${result.totalQuestions}\nErros: ${result.wrongCount}\nNota: ${result.score10}/10\nPercentual: ${result.percentage}%`
+    );
+
+    if (!confirmFinalize) return;
+
+    const { data, error } = await supabase
+      .from("exam_submissions")
+      .update({
+        final_score: result.score10,
+        final_percentage: result.percentage,
+        correction_completed: true,
+        correct_answers: result.correctCount,
+        wrong_answers: result.wrongCount,
+      })
+      .eq("id", selectedSubmission.id)
+      .select()
+      .single();
+
+    if (error) {
+      alert("Erro ao finalizar correção: " + error.message);
+      return;
+    }
+
+    setSelectedSubmission(data as Submission);
+    setSubmissions((prev) =>
+      prev.map((submission) => (submission.id === data.id ? (data as Submission) : submission))
+    );
+
+    alert("Correção finalizada com sucesso.");
+  }
+
+  function getStudentResultLink() {
+    if (!selectedSubmission) return "";
+
+    return `${window.location.origin}/student/result/${selectedSubmission.id}`;
+  }
+
+  async function copyResultLink() {
+    const link = getStudentResultLink();
+
+    if (!link) {
+      alert("Selecione uma submissão primeiro.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(link);
+      alert("Link do resultado copiado.");
+    } catch {
+      prompt("Copie o link do resultado:", link);
+    }
+  }
+
+  function sendResultWhatsApp() {
+    if (!selectedSubmission) {
+      alert("Selecione uma submissão primeiro.");
+      return;
+    }
+
+    const result = calculateFinalResult();
+    const link = getStudentResultLink();
+
+    const message = `Olá ${selectedSubmission.student_name || ""}!
+
+Sua prova foi corrigida.
+
+Prova: ${selectedSubmission.exam_name || selectedSubmission.book_name || "Avaliação"}
+Acertos: ${result.correctCount}/${result.totalQuestions}
+Nota: ${result.score10}/10
+Percentual: ${result.percentage}%
+
+Resultado:
+${link}`;
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
+  }
+
+  function printCorrectionPdf() {
+    if (!selectedSubmission) {
+      alert("Selecione uma submissão primeiro.");
+      return;
+    }
+
+    const result = calculateFinalResult();
+
+    const rows = questions
+      .map((question, index) => {
+        const key = getReviewKey(question);
+        const review = reviews[key] || {};
+        const correct = isCorrect(question);
+        const studentAnswer = getStudentAnswer(question);
+
+        const status =
+          correct === true ? "✓ Correta" : correct === false ? "✗ Incorreta" : "Manual";
+
+        return `
+          <div class="question">
+            <h3>Questão ${question.question_number || index + 1} — ${status}</h3>
+            <p><strong>Pergunta:</strong> ${escapeHtml(getQuestionText(question))}</p>
+            <p><strong>Resposta do aluno:</strong> ${escapeHtml(studentAnswer || "Sem resposta")}</p>
+            <p><strong>Resposta correta:</strong> ${escapeHtml(question.correct_answer || "Sem gabarito cadastrado")}</p>
+            ${
+              review.teacher_comment
+                ? `<p><strong>Observação do professor:</strong> ${escapeHtml(review.teacher_comment)}</p>`
+                : ""
+            }
+            ${
+              review.ai_feedback
+                ? `<p><strong>Feedback:</strong> ${escapeHtml(review.ai_feedback)}</p>`
+                : ""
+            }
+          </div>
+        `;
+      })
+      .join("");
+
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Resultado da Avaliação</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              color: #111827;
+              padding: 28px;
+              line-height: 1.45;
+            }
+            .header {
+              border-bottom: 2px solid #111827;
+              padding-bottom: 12px;
+              margin-bottom: 20px;
+            }
+            .summary {
+              display: grid;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 10px;
+              margin: 16px 0 22px;
+            }
+            .box {
+              border: 1px solid #cbd5e1;
+              border-radius: 10px;
+              padding: 12px;
+              background: #f8fafc;
+            }
+            .question {
+              border: 1px solid #e5e7eb;
+              border-radius: 10px;
+              padding: 14px;
+              margin-bottom: 12px;
+              page-break-inside: avoid;
+            }
+            h1, h2, h3 { margin-top: 0; }
+            .small { color: #64748b; font-size: 13px; }
+            @media print {
+              button { display: none; }
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Resultado da Avaliação</h1>
+            <p><strong>Aluno:</strong> ${escapeHtml(selectedSubmission.student_name || "Não informado")}</p>
+            <p><strong>Email:</strong> ${escapeHtml(selectedSubmission.student_email || "Não informado")}</p>
+            <p><strong>Prova:</strong> ${escapeHtml(selectedSubmission.exam_name || selectedSubmission.book_name || "Avaliação")}</p>
+            <p><strong>Protocolo:</strong> ${escapeHtml(selectedSubmission.protocol || selectedSubmission.id)}</p>
+            <p class="small">Gerado em: ${new Date().toLocaleString("pt-BR")}</p>
+          </div>
+
+          <div class="summary">
+            <div class="box"><strong>${result.totalQuestions}</strong><br/>Questões</div>
+            <div class="box"><strong>${result.correctCount}</strong><br/>Acertos</div>
+            <div class="box"><strong>${result.wrongCount}</strong><br/>Erros</div>
+            <div class="box"><strong>${result.score10}/10</strong><br/>Nota Final</div>
+          </div>
+
+          <h2>Correção por questão</h2>
+          ${rows}
+
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+
+    if (!printWindow) {
+      alert("O navegador bloqueou a janela de impressão.");
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }
+
+  function escapeHtml(value: string) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   const filteredSubmissions = useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -421,15 +692,42 @@ export default function CorrectionsPage() {
                   </p>
                 </div>
 
-                <div style={styles.summaryBox}>
-                  <strong>{summary.total}</strong>
-                  <span>questões</span>
-                  <strong style={styles.correctText}>{summary.correct}</strong>
-                  <span>certas</span>
-                  <strong style={styles.wrongText}>{summary.wrong}</strong>
-                  <span>erradas</span>
-                  <strong>{summary.manual}</strong>
-                  <span>manual</span>
+                <div style={styles.summaryPanel}>
+                  <div style={styles.summaryBox}>
+                    <strong>{summary.total}</strong>
+                    <span>questões</span>
+                    <strong style={styles.correctText}>{summary.correct}</strong>
+                    <span>certas</span>
+                    <strong style={styles.wrongText}>{summary.wrong}</strong>
+                    <span>erradas</span>
+                    <strong>{summary.manual}</strong>
+                    <span>manual</span>
+                  </div>
+
+                  <div style={styles.finalButtons}>
+                    <button onClick={finalizeCorrection} style={styles.finalizeButton}>
+                      🏆 Finalizar Correção
+                    </button>
+
+                    <button onClick={printCorrectionPdf} style={styles.pdfButton}>
+                      📄 Gerar PDF
+                    </button>
+
+                    <button onClick={copyResultLink} style={styles.linkButton}>
+                      🔗 Copiar Link
+                    </button>
+
+                    <button onClick={sendResultWhatsApp} style={styles.whatsButton}>
+                      🟢 WhatsApp
+                    </button>
+                  </div>
+
+                  {selectedSubmission.correction_completed && (
+                    <div style={styles.completedBox}>
+                      Finalizada: {selectedSubmission.final_score}/10 ·{" "}
+                      {selectedSubmission.final_percentage}%
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -696,6 +994,10 @@ const styles: any = {
     alignItems: "center",
   },
 
+  summaryPanel: {
+    minWidth: "280px",
+  },
+
   summaryBox: {
     display: "grid",
     gridTemplateColumns: "auto auto",
@@ -705,6 +1007,64 @@ const styles: any = {
     border: "1px solid #e5e7eb",
     borderRadius: "14px",
     padding: "14px",
+    marginBottom: "10px",
+  },
+
+  finalButtons: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "8px",
+  },
+
+  finalizeButton: {
+    background: "#16a34a",
+    color: "#fff",
+    border: "none",
+    borderRadius: "10px",
+    padding: "10px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  pdfButton: {
+    background: "#dc2626",
+    color: "#fff",
+    border: "none",
+    borderRadius: "10px",
+    padding: "10px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  linkButton: {
+    background: "#0284c7",
+    color: "#fff",
+    border: "none",
+    borderRadius: "10px",
+    padding: "10px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  whatsButton: {
+    background: "#22c55e",
+    color: "#fff",
+    border: "none",
+    borderRadius: "10px",
+    padding: "10px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  completedBox: {
+    background: "#dcfce7",
+    color: "#166534",
+    border: "1px solid #86efac",
+    borderRadius: "10px",
+    padding: "10px",
+    marginTop: "10px",
+    fontWeight: "bold",
+    textAlign: "center",
   },
 
   correctText: {
