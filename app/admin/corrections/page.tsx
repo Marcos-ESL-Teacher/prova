@@ -230,14 +230,25 @@ export default function CorrectionsPage() {
     const review = reviews[key] || {};
     const studentAnswer = getStudentAnswer(question);
     const correct = isCorrect(question);
+    const questionNumber =
+      question.question_number === null || question.question_number === undefined
+        ? Number(key)
+        : question.question_number;
 
     setSavingId(key);
 
     const payload: any = {
       submission_id: selectedSubmission.id,
       exam_id: selectedSubmission.exam_id || null,
+
+      /*
+        IMPORTANT:
+        question_id stays null because exam_answers.question_id is linked
+        to exam_questions, while this project currently uses exam_blocks.
+      */
       question_id: null,
-      question_number: question.question_number || null,
+
+      question_number: Number.isFinite(questionNumber) ? questionNumber : null,
       student_answer: studentAnswer || "",
       is_correct: correct,
       teacher_comment: review.teacher_comment || "",
@@ -252,35 +263,55 @@ export default function CorrectionsPage() {
     };
 
     try {
-      if (review.id) {
-        const { error } = await supabase
+      /*
+        We delete any previous review for the same submission + question number,
+        then insert the fresh correction. This prevents duplicate rows from hiding
+        the latest teacher comment when the submission is opened again.
+      */
+      if (payload.question_number !== null) {
+        const { error: deleteError } = await supabase
           .from("exam_answers")
-          .update(payload)
+          .delete()
+          .eq("submission_id", selectedSubmission.id)
+          .eq("question_number", payload.question_number);
+
+        if (deleteError) throw deleteError;
+      } else if (review.id) {
+        const { error: deleteError } = await supabase
+          .from("exam_answers")
+          .delete()
           .eq("id", review.id);
 
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from("exam_answers")
-          .insert([payload])
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        setReviews((prev) => ({
-          ...prev,
-          [key]: {
-            ...review,
-            id: data.id,
-            reviewed: true,
-          },
-        }));
+        if (deleteError) throw deleteError;
       }
 
-      alert("Correção salva.");
+      const { data, error } = await supabase
+        .from("exam_answers")
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setReviews((prev) => ({
+        ...prev,
+        [key]: {
+          teacher_comment: data.teacher_comment || "",
+          ai_feedback: data.ai_feedback || "",
+          teacher_score:
+            data.teacher_score === null || data.teacher_score === undefined
+              ? ""
+              : String(data.teacher_score),
+          ai_score:
+            data.ai_score === null || data.ai_score === undefined ? "" : String(data.ai_score),
+          reviewed: Boolean(data.reviewed),
+          id: data.id,
+        },
+      }));
+
+      alert("Correction saved.");
     } catch (error: any) {
-      alert("Erro ao salvar correção: " + (error?.message || String(error)));
+      alert("Error saving correction: " + (error?.message || String(error)));
     } finally {
       setSavingId(null);
     }
