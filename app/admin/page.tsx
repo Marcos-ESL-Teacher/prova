@@ -125,7 +125,7 @@ export default function TeacherDashboardPage() {
       const pdf = new jsPDF("p", "mm", "a4");
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 18;
+      const margin = 14;
       const resultLink = getResultLink(submission);
 
       let logoDataUrl = "";
@@ -143,66 +143,12 @@ export default function TeacherDashboardPage() {
 
       try {
         qrDataUrl = await QRCode.toDataURL(resultLink, {
-          width: 240,
+          width: 180,
           margin: 1,
         });
       } catch {
         qrDataUrl = "";
       }
-
-      pdf.setFillColor(248, 250, 252);
-      pdf.rect(0, 0, pageWidth, pageHeight, "F");
-
-      pdf.setFillColor(255, 255, 255);
-      pdf.roundedRect(margin, 12, pageWidth - margin * 2, 56, 4, 4, "F");
-
-      if (logoDataUrl) {
-pdf.addImage(
-  logoDataUrl,
-  getImageFormat(logoDataUrl),
-margin + 2,
-16,
-62,
-36
-);
-      }
-
-const headerTextX = logoDataUrl ? margin + 88 : margin + 4;
-
-      pdf.setTextColor(17, 24, 39);
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(18);
-      pdf.text("ENGLISH PERFORMANCE REPORT", headerTextX, 27);
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(11);
-      pdf.setTextColor(71, 85, 105);
-      pdf.text("Marcos Private English Lessons", headerTextX, 37);
-      pdf.text("Learn English Since 2011", headerTextX, 44);
-
-      pdf.setDrawColor(17, 24, 39);
-      pdf.line(headerTextX, 53, pageWidth - margin - 4, 53);
-
-      let y = 72;
-
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(13);
-      pdf.setTextColor(17, 24, 39);
-      pdf.text("Student Information", margin, y);
-
-      y += 8;
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(11);
-      pdf.text(`Student Name: ${submission.student_name || "Not provided"}`, margin, y);
-      y += 7;
-      pdf.text(`Email: ${submission.student_email || "Not provided"}`, margin, y);
-      y += 7;
-      pdf.text(`Exam: ${submission.exam_name || submission.book_name || "Assessment"}`, margin, y);
-      y += 7;
-      pdf.text(`Protocol: ${submission.protocol || submission.id}`, margin, y);
-      y += 7;
-      pdf.text(`Date: ${formatDate(submission.created_at)}`, margin, y);
 
       const score = Number(submission.final_score ?? 0);
       const percentage = Number(submission.final_percentage ?? 0);
@@ -210,107 +156,173 @@ const headerTextX = logoDataUrl ? margin + 88 : margin + 4;
       const wrongAnswers = Number(submission.wrong_answers ?? 0);
       const totalAnswers = correctAnswers + wrongAnswers;
 
-      y += 16;
+      // Background
+      pdf.setFillColor(248, 250, 252);
+      pdf.rect(0, 0, pageWidth, pageHeight, "F");
 
+      // Header - compact A4 layout
+      pdf.setFillColor(255, 255, 255);
+      pdf.roundedRect(margin, 10, pageWidth - margin * 2, 48, 4, 4, "F");
+
+      if (logoDataUrl) {
+        pdf.addImage(
+          logoDataUrl,
+          getImageFormat(logoDataUrl),
+          margin + 2,
+          14,
+          58,
+          34
+        );
+      }
+
+      const headerTextX = logoDataUrl ? margin + 68 : margin + 4;
+
+      pdf.setTextColor(17, 24, 39);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(16);
+      pdf.text("ENGLISH PERFORMANCE REPORT", headerTextX, 24);
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(10);
+      pdf.setTextColor(71, 85, 105);
+      pdf.text("Marcos Private English Lessons", headerTextX, 33);
+      pdf.text("Learn English Since 2011", headerTextX, 40);
+
+      pdf.setDrawColor(17, 24, 39);
+      pdf.line(headerTextX, 49, pageWidth - margin - 4, 49);
+
+      let y = 68;
+
+      // Student Information
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(12);
+      pdf.setTextColor(17, 24, 39);
+      pdf.text("Student Information", margin, y);
+
+      y += 7;
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9.5);
+      pdf.setTextColor(17, 24, 39);
+      pdf.text(`Student Name: ${submission.student_name || "Not provided"}`, margin, y);
+      y += 6;
+      pdf.text(`Email: ${submission.student_email || "Not provided"}`, margin, y);
+      y += 6;
+      pdf.text(`Exam: ${submission.exam_name || submission.book_name || "Assessment"}`, margin, y);
+      y += 6;
+      pdf.text(`Protocol: ${submission.protocol || submission.id}`, margin, y);
+      y += 6;
+      pdf.text(`Date: ${formatDate(submission.created_at)}`, margin, y);
+
+      y += 13;
+
+      // Performance Summary - compact
       pdf.setFillColor(239, 246, 255);
-      pdf.roundedRect(margin, y - 8, pageWidth - margin * 2, 34, 4, 4, "F");
+      pdf.roundedRect(margin, y - 7, pageWidth - margin * 2, 30, 4, 4, "F");
 
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(14);
+      pdf.setFontSize(12);
       pdf.setTextColor(30, 64, 175);
       pdf.text("Performance Summary", margin + 5, y);
 
-      y += 9;
+      y += 8;
 
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(11);
+      pdf.setFontSize(9.5);
       pdf.setTextColor(17, 24, 39);
       pdf.text(`Final Score: ${score || 0}/10`, margin + 5, y);
-      pdf.text(`Percentage: ${percentage || 0}%`, margin + 70, y);
-      y += 7;
+      pdf.text(`Percentage: ${percentage || 0}%`, margin + 68, y);
+      y += 6;
       pdf.text(`Correct Answers: ${correctAnswers}/${totalAnswers || "—"}`, margin + 5, y);
-      pdf.text(`Performance Level: ${getPerformanceLevel(score)}`, margin + 70, y);
+      pdf.text(`Performance Level: ${getPerformanceLevel(score)}`, margin + 68, y);
 
-      y += 24;
+      y += 19;
 
+      // Teacher Comments - reduced height
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(13);
+      pdf.setFontSize(12);
       pdf.setTextColor(17, 24, 39);
       pdf.text("Teacher Comments", margin, y);
 
-      y += 7;
+      y += 6;
 
       pdf.setDrawColor(203, 213, 225);
       pdf.setFillColor(255, 255, 255);
-      pdf.roundedRect(margin, y, pageWidth - margin * 2, 30, 3, 3, "FD");
+      pdf.roundedRect(margin, y, pageWidth - margin * 2, 20, 3, 3, "FD");
 
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(10);
+      pdf.setFontSize(8.5);
       pdf.setTextColor(100, 116, 139);
       pdf.text("Teacher comments can be added from the Corrections page.", margin + 4, y + 8);
 
-      y += 43;
+      y += 30;
 
+      // AI Feedback - reduced height
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(13);
+      pdf.setFontSize(12);
       pdf.setTextColor(17, 24, 39);
       pdf.text("AI Feedback", margin, y);
 
-      y += 7;
+      y += 6;
 
       pdf.setDrawColor(203, 213, 225);
       pdf.setFillColor(255, 255, 255);
-      pdf.roundedRect(margin, y, pageWidth - margin * 2, 30, 3, 3, "FD");
+      pdf.roundedRect(margin, y, pageWidth - margin * 2, 20, 3, 3, "FD");
 
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(10);
+      pdf.setFontSize(8.5);
       pdf.setTextColor(100, 116, 139);
-      pdf.text("AI feedback will appear here after the AI correction module is connected.", margin + 4, y + 8);
+      pdf.text(
+        "AI feedback will appear here after the AI correction module is connected.",
+        margin + 4,
+        y + 8
+      );
 
-      y += 45;
+      // Footer fixed inside A4 safe print area
+      const footerY = pageHeight - 68;
+      const qrSize = 24;
 
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(13);
+      pdf.setFontSize(12);
       pdf.setTextColor(17, 24, 39);
-      pdf.text("Online Result", margin, y);
-
-      y += 8;
+      pdf.text("Online Result", margin, footerY);
 
       if (qrDataUrl) {
-        pdf.addImage(qrDataUrl, "PNG", margin, y, 34, 34);
+        pdf.addImage(qrDataUrl, "PNG", margin, footerY + 6, qrSize, qrSize);
       }
 
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(10);
+      pdf.setFontSize(7.5);
       pdf.setTextColor(71, 85, 105);
-      const linkLines = pdf.splitTextToSize(resultLink, pageWidth - margin * 2 - 44);
-      pdf.text(linkLines, margin + 42, y + 8);
-
-      y += 52;
+      const linkLines = pdf.splitTextToSize(
+        resultLink,
+        pageWidth - margin * 2 - qrSize - 12
+      );
+      pdf.text(linkLines, margin + qrSize + 8, footerY + 16);
 
       pdf.setDrawColor(17, 24, 39);
-      pdf.line(margin, y, margin + 75, y);
-
-      y += 7;
+      pdf.line(pageWidth - margin - 74, footerY + 28, pageWidth - margin, footerY + 28);
 
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(11);
+      pdf.setFontSize(9);
       pdf.setTextColor(17, 24, 39);
-      pdf.text("Prof. Marcos Rogerio Leitao", margin, y);
-
-      y += 6;
+      pdf.text("Prof. Marcos Rogerio Leitao", pageWidth - margin - 37, footerY + 35, {
+        align: "center",
+      });
 
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(10);
-      pdf.setTextColor(71, 85, 105);
-      pdf.text("Teacher / English Coach", margin, y);
-
       pdf.setFontSize(8);
+      pdf.setTextColor(71, 85, 105);
+      pdf.text("Teacher / English Coach", pageWidth - margin - 37, footerY + 41, {
+        align: "center",
+      });
+
+      pdf.setFontSize(7);
       pdf.setTextColor(148, 163, 184);
       pdf.text(
         "This report focuses on learning progress and does not include Pass/Fail status.",
         margin,
-        pageHeight - 14
+        pageHeight - 10
       );
 
       const safeName = (submission.student_name || "student")
