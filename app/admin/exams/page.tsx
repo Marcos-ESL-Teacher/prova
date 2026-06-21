@@ -487,6 +487,48 @@ ${link}`);
     return result.data.text;
   }
 
+
+  async function extractTextFromImage(file: File) {
+    try {
+      setOcrRunning(true);
+      setOcrStatus("Lendo imagem...");
+
+      const image = new Image();
+      const objectUrl = URL.createObjectURL(file);
+
+      const imageLoaded = new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("Não foi possível carregar a imagem."));
+      });
+
+      image.src = objectUrl;
+      await imageLoaded;
+
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        throw new Error("Não foi possível criar o canvas para OCR da imagem.");
+      }
+
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(objectUrl);
+
+      const text = await recognizeCanvas(canvas, "OCR imagem");
+
+      setRawText(normalizeOcrText(text.trim()));
+      setOcrStatus("Imagem processada com sucesso. Revise o texto abaixo e clique em Gerar Blocos.");
+    } catch (error: any) {
+      alert("Erro ao processar imagem: " + (error?.message || String(error)));
+      setOcrStatus("Erro ao processar imagem.");
+    } finally {
+      setOcrRunning(false);
+    }
+  }
+
   function cropCanvas(
     sourceCanvas: HTMLCanvasElement,
     x: number,
@@ -1503,7 +1545,7 @@ ${link}`);
         <div>
           <h1 style={styles.title}>📚 Gerenciar Provas</h1>
           <p style={styles.subtitle}>
-            Coleções → Livros → Pastas → Slots → Provas → Importar PDF
+            Coleções → Livros → Pastas → Slots → Provas → Importar PDF ou Imagem
           </p>
         </div>
 
@@ -1683,7 +1725,7 @@ ${link}`);
                   </button>
 
                   <button onClick={() => selecionarProvaParaImportar(p)} style={styles.importButton}>
-                    📥 Importar PDF
+                    📥 Importar PDF/Imagem
                   </button>
 
                   <button
@@ -1729,7 +1771,7 @@ ${link}`);
         <section id="importador-integrado" style={styles.importerCard}>
           <div style={styles.importerHeader}>
             <div>
-              <h2 style={styles.cardTitle}>📥 Importador PDF da prova selecionada</h2>
+              <h2 style={styles.cardTitle}>📥 Importador PDF/Imagem da prova selecionada</h2>
               <p style={styles.subtitle}>
                 Prova: <strong>{provaSelecionada.title}</strong>
               </p>
@@ -1768,8 +1810,26 @@ ${link}`);
           </select>
 
           <div style={styles.uploadBox}>
-            <h3>Opção A — PDF escaneado com OCR</h3>
-            <p>Use esta opção quando o PDF for imagem/scan.</p>
+            <h3>📷 Opção A — Imagem da prova com OCR</h3>
+            <p>Use JPG, PNG ou WEBP. Para páginas escaneadas ou prints, esta opção costuma misturar menos as questões que PDF.</p>
+
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) extractTextFromImage(file);
+              }}
+              style={styles.input}
+              disabled={ocrRunning}
+            />
+
+            {ocrStatus && <div style={styles.statusBox}>{ocrStatus}</div>}
+          </div>
+
+          <div style={styles.uploadBox}>
+            <h3>Opção B — PDF escaneado com OCR</h3>
+            <p>Use esta opção quando você tiver apenas o PDF. Para PDFs de duas colunas, teste o modo por colunas.</p>
 
             <input
               type="file"
@@ -1779,9 +1839,8 @@ ${link}`);
                 if (file) extractTextFromPdfWithOcr(file);
               }}
               style={styles.input}
+              disabled={ocrRunning}
             />
-
-            {ocrStatus && <div style={styles.statusBox}>{ocrStatus}</div>}
           </div>
 
           <div style={styles.teacherBox}>
@@ -1805,7 +1864,7 @@ ${link}`);
           </div>
 
           <div style={styles.uploadBox}>
-            <h3>Opção B — Colar texto extraído manualmente</h3>
+            <h3>Opção C — Colar texto extraído manualmente</h3>
             <p>Use esta opção quando você conseguir copiar texto do PDF.</p>
 
             <textarea
