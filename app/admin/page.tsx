@@ -160,10 +160,10 @@ export default function TeacherDashboardPage() {
 pdf.addImage(
   logoDataUrl,
   getImageFormat(logoDataUrl),
-  margin + 2,
-  14,
-  75,
-  45
+margin + 2,
+16,
+62,
+36
 );
       }
 
@@ -183,7 +183,7 @@ const headerTextX = logoDataUrl ? margin + 88 : margin + 4;
       pdf.setDrawColor(17, 24, 39);
       pdf.line(headerTextX, 53, pageWidth - margin - 4, 53);
 
-      let y = 83;
+      let y = 72;
 
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(13);
