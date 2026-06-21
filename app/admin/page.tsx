@@ -157,17 +157,17 @@ export default function TeacherDashboardPage() {
       pdf.roundedRect(margin, 12, pageWidth - margin * 2, 56, 4, 4, "F");
 
       if (logoDataUrl) {
-        pdf.addImage(
-          logoDataUrl,
-          getImageFormat(logoDataUrl),
-          margin + 4,
-          18,
-          58,
-          34
-        );
+pdf.addImage(
+  logoDataUrl,
+  getImageFormat(logoDataUrl),
+  margin + 2,
+  14,
+  75,
+  45
+);
       }
 
-      const headerTextX = logoDataUrl ? margin + 70 : margin + 4;
+const headerTextX = logoDataUrl ? margin + 88 : margin + 4;
 
       pdf.setTextColor(17, 24, 39);
       pdf.setFont("helvetica", "bold");
