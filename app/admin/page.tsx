@@ -677,13 +677,12 @@ const styles: any = {
     gap: "16px",
   },
 
-  logo: {
-    width: "72px",
-    height: "72px",
-    objectFit: "contain",
-    borderRadius: "12px",
-    background: "#fff",
-  },
+logo: {
+  width: "180px",
+  height: "100px",
+  objectFit: "contain",
+  background: "transparent",
+},
 
   title: {
     margin: 0,
@@ -859,14 +858,12 @@ const styles: any = {
     marginBottom: "18px",
   },
 
-  reportLogo: {
-    width: "92px",
-    height: "92px",
-    objectFit: "contain",
-    borderRadius: "14px",
-    background: "#fff",
-    border: "1px solid #e5e7eb",
-  },
+reportLogo: {
+  width: "220px",
+  height: "120px",
+  objectFit: "contain",
+  background: "transparent",
+},
 
   reportTitle: {
     margin: "0 0 6px",
