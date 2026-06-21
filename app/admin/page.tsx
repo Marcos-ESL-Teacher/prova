@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { jsPDF } from "jspdf";
+import QRCode from "qrcode";
 import { supabase } from "../../lib/supabase";
 
 type TabKey =
@@ -91,7 +92,17 @@ export default function TeacherDashboardPage() {
   }
 
   async function imageUrlToDataUrl(url: string) {
-    const response = await fetch(url);
+    const absoluteUrl = url.startsWith("http")
+      ? url
+      : `${window.location.origin}${url}`;
+
+    const separator = absoluteUrl.includes("?") ? "&" : "?";
+    const response = await fetch(`${absoluteUrl}${separator}v=${Date.now()}`);
+
+    if (!response.ok) {
+      throw new Error(`Could not load image: ${url}`);
+    }
+
     const blob = await response.blob();
 
     return await new Promise<string>((resolve, reject) => {
@@ -101,6 +112,10 @@ export default function TeacherDashboardPage() {
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
+  }
+
+  function getImageFormat(dataUrl: string) {
+    return dataUrl.toLowerCase().includes("image/png") ? "PNG" : "JPEG";
   }
 
   async function generateProfessionalPdf(submission: Submission) {
@@ -119,14 +134,18 @@ export default function TeacherDashboardPage() {
       try {
         logoDataUrl = await imageUrlToDataUrl("/logo.jpg");
       } catch {
-        logoDataUrl = "";
+        try {
+          logoDataUrl = await imageUrlToDataUrl("/logo.jpeg");
+        } catch {
+          logoDataUrl = "";
+        }
       }
 
       try {
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-          resultLink
-        )}`;
-        qrDataUrl = await imageUrlToDataUrl(qrUrl);
+        qrDataUrl = await QRCode.toDataURL(resultLink, {
+          width: 240,
+          margin: 1,
+        });
       } catch {
         qrDataUrl = "";
       }
@@ -135,27 +154,36 @@ export default function TeacherDashboardPage() {
       pdf.rect(0, 0, pageWidth, pageHeight, "F");
 
       pdf.setFillColor(255, 255, 255);
-      pdf.roundedRect(margin, 12, pageWidth - margin * 2, 48, 4, 4, "F");
+      pdf.roundedRect(margin, 12, pageWidth - margin * 2, 56, 4, 4, "F");
 
       if (logoDataUrl) {
-        pdf.addImage(logoDataUrl, "JPEG", margin + 4, 17, 32, 32);
+        pdf.addImage(
+          logoDataUrl,
+          getImageFormat(logoDataUrl),
+          margin + 4,
+          18,
+          58,
+          34
+        );
       }
+
+      const headerTextX = logoDataUrl ? margin + 70 : margin + 4;
 
       pdf.setTextColor(17, 24, 39);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(18);
-      pdf.text("ENGLISH PERFORMANCE REPORT", margin + 42, 25);
+      pdf.text("ENGLISH PERFORMANCE REPORT", headerTextX, 27);
 
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(11);
       pdf.setTextColor(71, 85, 105);
-      pdf.text("Marcos Private English Lessons", margin + 42, 34);
-      pdf.text("Learn English Since 2011", margin + 42, 41);
+      pdf.text("Marcos Private English Lessons", headerTextX, 37);
+      pdf.text("Learn English Since 2011", headerTextX, 44);
 
       pdf.setDrawColor(17, 24, 39);
-      pdf.line(margin + 42, 48, pageWidth - margin - 4, 48);
+      pdf.line(headerTextX, 53, pageWidth - margin - 4, 53);
 
-      let y = 75;
+      let y = 83;
 
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(13);
