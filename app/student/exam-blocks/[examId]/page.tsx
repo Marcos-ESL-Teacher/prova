@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 
@@ -45,8 +45,6 @@ export default function StudentExamBlocksPage() {
   const [blocks, setBlocks] = useState<ExamBlock[]>([]);
   const [visualFields, setVisualFields] = useState<VisualField[]>([]);
   const [pdfUrl, setPdfUrl] = useState("");
-  const [visualPageImageUrl, setVisualPageImageUrl] = useState("");
-  const [visualPdfRendering, setVisualPdfRendering] = useState(false);
   const [visualCurrentPage, setVisualCurrentPage] = useState(1);
   const [visualTotalPages, setVisualTotalPages] = useState(1);
   const [studentName, setStudentName] = useState("");
@@ -56,6 +54,10 @@ export default function StudentExamBlocksPage() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [protocol, setProtocol] = useState("");
+  const visualSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const pdfCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [renderingPdf, setRenderingPdf] = useState(false);
+  const [pdfCanvasSize, setPdfCanvasSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     loadPageData();
@@ -63,77 +65,17 @@ export default function StudentExamBlocksPage() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    if (!pdfUrl || !pdfUrl.toLowerCase().includes(".pdf")) return;
 
-    async function renderCurrentVisualPage() {
-      if (!pdfUrl) {
-        setVisualPageImageUrl("");
-        setVisualPdfRendering(false);
-        return;
-      }
+    renderCurrentPdfPage();
 
-      if (!pdfUrl.toLowerCase().includes(".pdf")) {
-        setVisualPageImageUrl(pdfUrl);
-        setVisualPdfRendering(false);
-        return;
-      }
-
-      try {
-        setVisualPdfRendering(true);
-
-        const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
-
-        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-          "pdfjs-dist/legacy/build/pdf.worker.mjs",
-          import.meta.url
-        ).toString();
-
-        const pdf = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
-        const safePage = Math.min(
-          Math.max(1, Number(visualCurrentPage || 1)),
-          Number(pdf.numPages || 1)
-        );
-
-        const page = await pdf.getPage(safePage);
-        const viewport = page.getViewport({ scale: 2 });
-
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
-
-        if (!context) {
-          throw new Error("Não foi possível preparar a página do PDF.");
-        }
-
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        await page.render({
-          canvasContext: context,
-          viewport,
-        }).promise;
-
-        if (!cancelled) {
-          setVisualTotalPages(Number(pdf.numPages || 1));
-          setVisualPageImageUrl(canvas.toDataURL("image/png"));
-        }
-      } catch (error) {
-        console.log("Erro ao renderizar página visual:", error);
-
-        if (!cancelled) {
-          setVisualPageImageUrl("");
-        }
-      } finally {
-        if (!cancelled) {
-          setVisualPdfRendering(false);
-        }
-      }
-    }
-
-    renderCurrentVisualPage();
-
-    return () => {
-      cancelled = true;
+    const handleResize = () => {
+      renderCurrentPdfPage();
     };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfUrl, visualCurrentPage]);
 
   async function loadPageData() {
@@ -203,7 +145,6 @@ export default function StudentExamBlocksPage() {
   async function loadPdf(pdfStoragePathOrUrl: string) {
     if (!pdfStoragePathOrUrl) {
       setPdfUrl("");
-      setVisualPageImageUrl("");
       setVisualCurrentPage(1);
       setVisualTotalPages(1);
       return;
@@ -252,6 +193,68 @@ export default function StudentExamBlocksPage() {
     } catch (error) {
       console.log("Não foi possível contar páginas do PDF:", error);
       setVisualTotalPages(1);
+    }
+  }
+
+  async function renderCurrentPdfPage() {
+    if (!pdfUrl || !pdfUrl.toLowerCase().includes(".pdf")) return;
+
+    const canvas = pdfCanvasRef.current;
+    if (!canvas) return;
+
+    setRenderingPdf(true);
+
+    try {
+      const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/legacy/build/pdf.worker.mjs",
+        import.meta.url
+      ).toString();
+
+      const pdf = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
+      const totalPages = Number(pdf.numPages || 1);
+      setVisualTotalPages(totalPages);
+
+      const safePage = Math.min(Math.max(1, Number(visualCurrentPage || 1)), totalPages);
+      if (safePage !== visualCurrentPage) {
+        setVisualCurrentPage(safePage);
+        return;
+      }
+
+      const page = await pdf.getPage(safePage);
+      const baseViewport = page.getViewport({ scale: 1 });
+
+      const surfaceWidth = visualSurfaceRef.current?.clientWidth || 900;
+      const availableWidth = Math.max(320, Math.min(surfaceWidth, 900));
+      const scale = availableWidth / baseViewport.width;
+      const viewport = page.getViewport({ scale });
+
+      const pixelRatio = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(viewport.width * pixelRatio);
+      canvas.height = Math.floor(viewport.height * pixelRatio);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+      const context = canvas.getContext("2d");
+      if (!context) return;
+
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      context.clearRect(0, 0, viewport.width, viewport.height);
+
+      await page.render({
+        canvasContext: context,
+        viewport,
+      }).promise;
+
+      setPdfCanvasSize({
+        width: Math.floor(viewport.width),
+        height: Math.floor(viewport.height),
+      });
+    } catch (error) {
+      console.log("Erro ao renderizar PDF:", error);
+    } finally {
+      setRenderingPdf(false);
     }
   }
 
@@ -594,17 +597,37 @@ export default function StudentExamBlocksPage() {
             </div>
 
             <div style={styles.visualPaper}>
-              <div style={styles.visualPdfSurface}>
-                {visualPdfRendering && !visualPageImageUrl && (
-                  <div style={styles.visualRenderingBox}>Carregando página do PDF...</div>
-                )}
-
-                {visualPageImageUrl && (
+              <div
+                ref={visualSurfaceRef}
+                style={{
+                  ...styles.visualPdfSurface,
+                  minHeight: pdfUrl.toLowerCase().includes(".pdf")
+                    ? Math.max(600, pdfCanvasSize.height || 0)
+                    : undefined,
+                }}
+              >
+                {pdfUrl.toLowerCase().includes(".pdf") ? (
+                  <div style={styles.visualCanvasBox}>
+                    {renderingPdf && (
+                      <div style={styles.pdfLoading}>Carregando página do PDF...</div>
+                    )}
+                    <canvas
+                      ref={pdfCanvasRef}
+                      style={styles.visualPdfCanvas}
+                    />
+                  </div>
+                ) : (
                   <img
-                    key={`visual-page-${visualCurrentPage}`}
-                    src={visualPageImageUrl}
-                    alt={`Página ${visualCurrentPage} da prova`}
+                    src={pdfUrl}
+                    alt="Prova"
                     style={styles.visualImage}
+                    onLoad={(event) => {
+                      const image = event.currentTarget;
+                      setPdfCanvasSize({
+                        width: image.clientWidth,
+                        height: image.clientHeight,
+                      });
+                    }}
                   />
                 )}
 
@@ -1074,45 +1097,58 @@ const styles: any = {
     overflowY: "auto",
     overflowX: "auto",
     overscrollBehavior: "contain",
-    padding: "18px",
+    padding: "18px 0",
   },
 
   visualPdfSurface: {
     position: "relative",
     width: "100%",
-    maxWidth: "860px",
+    maxWidth: "900px",
     margin: "0 auto",
-    background: "#fff",
+    background: "#ffffff",
     isolation: "isolate",
-    boxShadow: "0 8px 22px rgba(0,0,0,0.22)",
+    boxShadow: "0 0 0 1px rgba(15,23,42,0.12), 0 8px 24px rgba(0,0,0,0.25)",
   },
 
-  visualRenderingBox: {
+  visualCanvasBox: {
+    position: "relative",
+    width: "100%",
     minHeight: "600px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "#475569",
-    background: "#fff",
-    fontWeight: "bold",
+    background: "#ffffff",
   },
 
-  visualPdfFrame: {
-    display: "none",
+  visualPdfCanvas: {
+    display: "block",
+    width: "100%",
+    height: "auto",
+    background: "#ffffff",
+    pointerEvents: "none",
+  },
+
+  pdfLoading: {
+    position: "absolute",
+    top: "16px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 20,
+    background: "rgba(255,255,255,0.94)",
+    border: "1px solid #cbd5e1",
+    borderRadius: "999px",
+    padding: "8px 14px",
+    fontSize: "13px",
+    color: "#475569",
   },
 
   visualImage: {
     width: "100%",
-    height: "auto",
     display: "block",
     pointerEvents: "none",
-    userSelect: "none",
   },
 
   visualFieldsLayer: {
     position: "absolute",
     inset: 0,
-    zIndex: 400,
+    zIndex: 40,
     pointerEvents: "none",
   },
 
@@ -1131,7 +1167,6 @@ const styles: any = {
     cursor: "pointer",
     outline: "none",
     zIndex: 500,
-    boxSizing: "border-box",
   },
 
   visualChoiceSelected: {
