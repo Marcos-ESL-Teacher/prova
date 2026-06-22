@@ -1,5 +1,62 @@
 import { NextResponse } from "next/server";
 
+function extractTextFromOpenAIResponse(data: any): string {
+  if (typeof data?.output_text === "string" && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
+  const output = data?.output;
+
+  if (Array.isArray(output)) {
+    const parts: string[] = [];
+
+    for (const item of output) {
+      const content = item?.content;
+
+      if (Array.isArray(content)) {
+        for (const contentItem of content) {
+          if (typeof contentItem?.text === "string") {
+            parts.push(contentItem.text);
+          }
+
+          if (typeof contentItem?.content === "string") {
+            parts.push(contentItem.content);
+          }
+
+          if (typeof contentItem?.value === "string") {
+            parts.push(contentItem.value);
+          }
+        }
+      }
+
+      if (typeof item?.text === "string") {
+        parts.push(item.text);
+      }
+    }
+
+    const joined = parts.join("\n").trim();
+
+    if (joined) {
+      return joined;
+    }
+  }
+
+  const choices = data?.choices;
+
+  if (Array.isArray(choices)) {
+    const joined = choices
+      .map((choice: any) => choice?.message?.content || choice?.text || "")
+      .join("\n")
+      .trim();
+
+    if (joined) {
+      return joined;
+    }
+  }
+
+  return "";
+}
+
 export async function POST(request: Request) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -87,7 +144,12 @@ ${rawText}
       },
       body: JSON.stringify({
         model: "gpt-4.1-mini",
-        input: prompt,
+        input: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
         temperature: 0.1,
       }),
     });
@@ -95,17 +157,34 @@ ${rawText}
     const data = await response.json();
 
     if (!response.ok) {
+      const openAiMessage =
+        data?.error?.message ||
+        data?.message ||
+        "Erro da OpenAI.";
+
       return NextResponse.json(
-        { ok: false, message: "Erro da OpenAI.", error: data },
+        {
+          ok: false,
+          message: openAiMessage,
+          error: data,
+        },
         { status: response.status }
       );
     }
 
-    const cleanedText = String(data?.output_text || "").trim();
+    const cleanedText = extractTextFromOpenAIResponse(data);
 
     if (!cleanedText) {
       return NextResponse.json(
-        { ok: false, message: "A IA não retornou texto corrigido." },
+        {
+          ok: false,
+          message: "A IA respondeu, mas o sistema não conseguiu ler o texto retornado.",
+          debugShape: {
+            hasOutputText: typeof data?.output_text === "string",
+            hasOutputArray: Array.isArray(data?.output),
+            outputLength: Array.isArray(data?.output) ? data.output.length : 0,
+          },
+        },
         { status: 500 }
       );
     }
@@ -120,4 +199,12 @@ ${rawText}
       { status: 500 }
     );
   }
+}
+
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    route: "/api/import-exam-ai",
+    message: "Rota de importação IA ativa. Use POST com rawText.",
+  });
 }
