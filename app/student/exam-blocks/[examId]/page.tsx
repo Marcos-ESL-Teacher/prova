@@ -426,6 +426,8 @@ export default function StudentExamBlocksPage() {
       top: `${field.y}%`,
       width: `${field.width}%`,
       height: `${field.height}%`,
+      zIndex: 50,
+      pointerEvents: "auto",
     };
 
     if (field.field_type === "choice") {
@@ -526,9 +528,11 @@ export default function StudentExamBlocksPage() {
                   <img src={pdfUrl} alt="Prova" style={styles.visualImage} />
                 )}
 
-                {visualFields
-                  .filter((field) => Number(field.page_number || 1) === Number(visualCurrentPage))
-                  .map((field, index) => renderVisualField(field, index))}
+                <div style={styles.visualFieldsLayer}>
+                  {visualFields
+                    .filter((field) => Number(field.page_number || 1) === Number(visualCurrentPage))
+                    .map((field, index) => renderVisualField(field, index))}
+                </div>
               </div>
             </div>
           </>
@@ -984,7 +988,7 @@ const styles: any = {
     width: "100%",
     height: "80vh",
     maxHeight: "80vh",
-    background: "#f8fafc",
+    background: "#111827",
     border: "1px solid #cbd5e1",
     borderRadius: "12px",
     overflowY: "auto",
@@ -996,9 +1000,12 @@ const styles: any = {
     position: "relative",
     width: "100%",
     minHeight: "1200px",
+    isolation: "isolate",
   },
 
   visualPdfFrame: {
+    position: "relative",
+    zIndex: 1,
     width: "100%",
     height: "1200px",
     border: "none",
@@ -1012,11 +1019,18 @@ const styles: any = {
     pointerEvents: "none",
   },
 
+  visualFieldsLayer: {
+    position: "absolute",
+    inset: 0,
+    zIndex: 400,
+    pointerEvents: "none",
+  },
+
   visualAnswerField: {
     position: "absolute",
     transform: "translate(-50%, -50%)",
-    border: "1px solid rgba(37, 99, 235, 0.65)",
-    background: "rgba(255,255,255,0.25)",
+    border: "2px solid rgba(37, 99, 235, 0.95)",
+    background: "rgba(255,255,255,0.82)",
     color: "#111827",
     borderRadius: "4px",
     display: "flex",
@@ -1026,7 +1040,7 @@ const styles: any = {
     fontSize: "18px",
     cursor: "pointer",
     outline: "none",
-    zIndex: 5,
+    zIndex: 500,
   },
 
   visualChoiceSelected: {
@@ -1037,12 +1051,12 @@ const styles: any = {
 
   visualTextInput: {
     padding: "0 6px 1px",
-    fontSize: "15px",
+    fontSize: "16px",
     textAlign: "center",
-    background: "rgba(255,255,255,0.15)",
+    background: "rgba(255,255,255,0.55)",
     border: "none",
     borderBottom: "2px solid #2563eb",
-    borderRadius: 0,
+    borderRadius: "0",
     height: "100%",
     boxShadow: "none",
   },
@@ -1051,8 +1065,9 @@ const styles: any = {
     padding: "6px",
     fontSize: "14px",
     resize: "none",
-    background: "rgba(255,255,255,0.88)",
+    background: "rgba(255,255,255,0.96)",
     border: "2px solid #2563eb",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
   },
 
   visualDoubtInput: {
