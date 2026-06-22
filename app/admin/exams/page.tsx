@@ -2289,37 +2289,39 @@ ${link}`);
               </div>
 
               <div style={styles.visualWorkspace}>
-                <div
-                  style={styles.visualCanvas}
-                  onClick={adicionarCampoVisualPorClique}
-                  title="Clique para criar um campo de resposta"
-                >
-                  {visualFileUrl.toLowerCase().includes(".pdf") ? (
-                    <iframe
-                      key={`visual-pdf-${visualCurrentPage}`}
-                      src={`${visualFileUrl}#page=${visualCurrentPage}&zoom=page-width`}
-                      style={styles.visualPdfFrame}
-                    />
-                  ) : (
-                    <img src={visualFileUrl} alt="Prova visual" style={styles.visualImage} />
-                  )}
-
-                  {visualFields.filter((field) => Number(field.page_number || 1) === Number(visualCurrentPage)).map((field, index) => (
+                <div style={styles.visualCanvas}>
                   <div
-                    key={`${field.question_number}-${field.answer_value}-${index}`}
-                    style={{
-                      ...styles.visualOverlayField,
-                      left: `${field.x}%`,
-                      top: `${field.y}%`,
-                      width: `${field.width}%`,
-                      height: `${field.height}%`,
-                    }}
-                    onClick={(e) => e.stopPropagation()}
+                    style={styles.visualPdfSurface}
+                    onClick={adicionarCampoVisualPorClique}
+                    title="Clique para criar um campo de resposta"
                   >
-                    {field.field_type === "choice" ? "X" : `Q${field.question_number}`}
+                    {visualFileUrl.toLowerCase().includes(".pdf") ? (
+                      <iframe
+                        key={`visual-pdf-${visualCurrentPage}`}
+                        src={`${visualFileUrl}#page=${visualCurrentPage}&zoom=page-width`}
+                        style={styles.visualPdfFrame}
+                      />
+                    ) : (
+                      <img src={visualFileUrl} alt="Prova visual" style={styles.visualImage} />
+                    )}
+
+                    {visualFields.filter((field) => Number(field.page_number || 1) === Number(visualCurrentPage)).map((field, index) => (
+                      <div
+                        key={`${field.question_number}-${field.answer_value}-${index}`}
+                        style={{
+                          ...styles.visualOverlayField,
+                          left: `${field.x}%`,
+                          top: `${field.y}%`,
+                          width: `${field.width}%`,
+                          height: `${field.height}%`,
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {field.field_type === "choice" ? "X" : `Q${field.question_number}`}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
 
               <div style={styles.visualFieldList}>
                 <h3>Campos criados ({visualFields.length})</h3>
@@ -3227,17 +3229,26 @@ const styles: any = {
   visualCanvas: {
     position: "relative",
     width: "100%",
-    minHeight: "760px",
+    height: "80vh",
+    maxHeight: "80vh",
     background: "#e5e7eb",
     border: "2px dashed #fb923c",
     borderRadius: "12px",
-    overflow: "hidden",
+    overflowY: "auto",
+    overflowX: "auto",
+    overscrollBehavior: "contain",
+  },
+
+  visualPdfSurface: {
+    position: "relative",
+    width: "100%",
+    minHeight: "1200px",
     cursor: "crosshair",
   },
 
   visualPdfFrame: {
     width: "100%",
-    height: "900px",
+    height: "1200px",
     border: "none",
     background: "#fff",
     pointerEvents: "none",

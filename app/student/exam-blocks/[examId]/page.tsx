@@ -511,19 +511,21 @@ export default function StudentExamBlocksPage() {
             </div>
 
             <div style={styles.visualPaper}>
-              {pdfUrl.toLowerCase().includes(".pdf") ? (
-                <iframe
-                  key={`visual-pdf-${visualCurrentPage}`}
-                  src={`${pdfUrl}#page=${visualCurrentPage}&zoom=page-width`}
-                  style={styles.visualPdfFrame}
-                />
-              ) : (
-                <img src={pdfUrl} alt="Prova" style={styles.visualImage} />
-              )}
+              <div style={styles.visualPdfSurface}>
+                {pdfUrl.toLowerCase().includes(".pdf") ? (
+                  <iframe
+                    key={`visual-pdf-${visualCurrentPage}`}
+                    src={`${pdfUrl}#page=${visualCurrentPage}&zoom=page-width`}
+                    style={styles.visualPdfFrame}
+                  />
+                ) : (
+                  <img src={pdfUrl} alt="Prova" style={styles.visualImage} />
+                )}
 
-              {visualFields
-                .filter((field) => Number(field.page_number || 1) === Number(visualCurrentPage))
-                .map((field, index) => renderVisualField(field, index))}
+                {visualFields
+                  .filter((field) => Number(field.page_number || 1) === Number(visualCurrentPage))
+                  .map((field, index) => renderVisualField(field, index))}
+              </div>
             </div>
           </>
         )}
@@ -976,16 +978,25 @@ const styles: any = {
   visualPaper: {
     position: "relative",
     width: "100%",
-    minHeight: "880px",
+    height: "80vh",
+    maxHeight: "80vh",
     background: "#f8fafc",
     border: "1px solid #cbd5e1",
     borderRadius: "12px",
-    overflow: "hidden",
+    overflowY: "auto",
+    overflowX: "auto",
+    overscrollBehavior: "contain",
+  },
+
+  visualPdfSurface: {
+    position: "relative",
+    width: "100%",
+    minHeight: "1200px",
   },
 
   visualPdfFrame: {
     width: "100%",
-    height: "980px",
+    height: "1200px",
     border: "none",
     background: "#fff",
     pointerEvents: "none",
