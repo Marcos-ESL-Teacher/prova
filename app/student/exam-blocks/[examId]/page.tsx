@@ -45,6 +45,8 @@ export default function StudentExamBlocksPage() {
   const [blocks, setBlocks] = useState<ExamBlock[]>([]);
   const [visualFields, setVisualFields] = useState<VisualField[]>([]);
   const [pdfUrl, setPdfUrl] = useState("");
+  const [visualCurrentPage, setVisualCurrentPage] = useState(1);
+  const [visualTotalPages, setVisualTotalPages] = useState(1);
   const [studentName, setStudentName] = useState("");
   const [studentPhone, setStudentPhone] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -123,13 +125,19 @@ export default function StudentExamBlocksPage() {
   }
 
   async function loadPdf(pdfStoragePathOrUrl: string) {
-    if (!pdfStoragePathOrUrl) return;
+    if (!pdfStoragePathOrUrl) {
+      setPdfUrl("");
+      setVisualCurrentPage(1);
+      setVisualTotalPages(1);
+      return;
+    }
 
     if (
       pdfStoragePathOrUrl.startsWith("http://") ||
       pdfStoragePathOrUrl.startsWith("https://")
     ) {
       setPdfUrl(pdfStoragePathOrUrl);
+      await loadPdfPageCount(pdfStoragePathOrUrl);
       return;
     }
 
@@ -143,6 +151,31 @@ export default function StudentExamBlocksPage() {
     }
 
     setPdfUrl(data.signedUrl);
+    await loadPdfPageCount(data.signedUrl);
+  }
+
+  async function loadPdfPageCount(fileUrl: string) {
+    setVisualCurrentPage(1);
+
+    if (!fileUrl.toLowerCase().includes(".pdf")) {
+      setVisualTotalPages(1);
+      return;
+    }
+
+    try {
+      const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/legacy/build/pdf.worker.mjs",
+        import.meta.url
+      ).toString();
+
+      const pdf = await pdfjsLib.getDocument({ url: fileUrl }).promise;
+      setVisualTotalPages(Number(pdf.numPages || 1));
+    } catch (error) {
+      console.log("Não foi possível contar páginas do PDF:", error);
+      setVisualTotalPages(1);
+    }
   }
 
   function isVisualExam() {
@@ -452,15 +485,47 @@ export default function StudentExamBlocksPage() {
         )}
 
         {pdfUrl && (
-          <div style={styles.visualPaper}>
-            {pdfUrl.toLowerCase().includes(".pdf") ? (
-              <iframe src={pdfUrl} style={styles.visualPdfFrame} />
-            ) : (
-              <img src={pdfUrl} alt="Prova" style={styles.visualImage} />
-            )}
+          <>
+            <div style={styles.visualPageControls}>
+              <button
+                type="button"
+                onClick={() => setVisualCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={visualCurrentPage <= 1}
+                style={styles.secondaryButton}
+              >
+                ◀ Página anterior
+              </button>
 
-            {visualFields.map((field, index) => renderVisualField(field, index))}
-          </div>
+              <strong>
+                Página {visualCurrentPage} de {visualTotalPages}
+              </strong>
+
+              <button
+                type="button"
+                onClick={() => setVisualCurrentPage((prev) => Math.min(visualTotalPages, prev + 1))}
+                disabled={visualCurrentPage >= visualTotalPages}
+                style={styles.secondaryButton}
+              >
+                Próxima página ▶
+              </button>
+            </div>
+
+            <div style={styles.visualPaper}>
+              {pdfUrl.toLowerCase().includes(".pdf") ? (
+                <iframe
+                  key={`visual-pdf-${visualCurrentPage}`}
+                  src={`${pdfUrl}#page=${visualCurrentPage}&zoom=page-width`}
+                  style={styles.visualPdfFrame}
+                />
+              ) : (
+                <img src={pdfUrl} alt="Prova" style={styles.visualImage} />
+              )}
+
+              {visualFields
+                .filter((field) => Number(field.page_number || 1) === Number(visualCurrentPage))
+                .map((field, index) => renderVisualField(field, index))}
+            </div>
+          </>
         )}
       </div>
     );
@@ -875,6 +940,16 @@ const styles: any = {
     fontSize: "17px",
   },
 
+  secondaryButton: {
+    padding: "10px 14px",
+    background: "#e2e8f0",
+    color: "#0f172a",
+    border: "1px solid #cbd5e1",
+    borderRadius: "10px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
   successBox: {
     marginTop: "30px",
     background: "#ecfdf5",
@@ -886,6 +961,16 @@ const styles: any = {
 
   visualExamBox: {
     marginTop: "20px",
+  },
+
+  visualPageControls: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "12px",
+    marginTop: "16px",
+    marginBottom: "12px",
+    flexWrap: "wrap",
   },
 
   visualPaper: {

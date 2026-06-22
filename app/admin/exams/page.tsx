@@ -85,6 +85,8 @@ export default function ExamsAdminPage() {
   const [visualFieldHeight, setVisualFieldHeight] = useState(4);
   const [visualStatus, setVisualStatus] = useState("");
   const [visualSaving, setVisualSaving] = useState(false);
+  const [visualCurrentPage, setVisualCurrentPage] = useState(1);
+  const [visualTotalPages, setVisualTotalPages] = useState(1);
 
   useEffect(() => {
     carregarColecoes();
@@ -343,6 +345,8 @@ export default function ExamsAdminPage() {
     setVisualStatus("");
     setVisualFields([]);
     setVisualFileUrl("");
+    setVisualCurrentPage(1);
+    setVisualTotalPages(1);
 
     const rawPdfValue = prova.pdf_url || prova.pdf_storage_path || "";
     if (rawPdfValue) {
@@ -362,11 +366,14 @@ export default function ExamsAdminPage() {
   async function carregarArquivoVisual(pdfValue: string) {
     if (!pdfValue) {
       setVisualFileUrl("");
+      setVisualCurrentPage(1);
+      setVisualTotalPages(1);
       return;
     }
 
     if (pdfValue.startsWith("http://") || pdfValue.startsWith("https://")) {
       setVisualFileUrl(pdfValue);
+      await atualizarTotalPaginasVisual(pdfValue);
       return;
     }
 
@@ -380,6 +387,33 @@ export default function ExamsAdminPage() {
     }
 
     setVisualFileUrl(data.signedUrl);
+    await atualizarTotalPaginasVisual(data.signedUrl);
+  }
+
+  async function atualizarTotalPaginasVisual(fileUrl: string) {
+    setVisualCurrentPage(1);
+
+    if (!fileUrl.toLowerCase().includes(".pdf")) {
+      setVisualTotalPages(1);
+      return;
+    }
+
+    try {
+      const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/legacy/build/pdf.worker.mjs",
+        import.meta.url
+      ).toString();
+
+      const pdf = await pdfjsLib.getDocument({ url: fileUrl }).promise;
+      setVisualTotalPages(Number(pdf.numPages || 1));
+    } catch (error: any) {
+      setVisualTotalPages(1);
+      setVisualStatus(
+        "Arquivo aberto, mas não consegui contar as páginas automaticamente. Se for PDF com várias páginas, envie o arquivo novamente ou confira permissões do Storage."
+      );
+    }
   }
 
   async function carregarCamposVisuais(examId: string) {
@@ -469,7 +503,7 @@ export default function ExamsAdminPage() {
     const y = ((event.clientY - rect.top) / rect.height) * 100;
 
     const field: VisualFieldDraft = {
-      page_number: 1,
+      page_number: Number(visualCurrentPage || 1),
       question_number: Number(visualQuestionNumber || 1),
       field_type: visualFieldType,
       answer_value: visualFieldType === "choice" ? visualAnswerValue.trim().toUpperCase() || "A" : `q${visualQuestionNumber}`,
@@ -2229,19 +2263,48 @@ ${link}`);
           {visualStatus && <div style={styles.statusBox}>{visualStatus}</div>}
 
           {visualFileUrl ? (
-            <div style={styles.visualWorkspace}>
-              <div
-                style={styles.visualCanvas}
-                onClick={adicionarCampoVisualPorClique}
-                title="Clique para criar um campo de resposta"
-              >
-                {visualFileUrl.toLowerCase().includes(".pdf") ? (
-                  <iframe src={visualFileUrl} style={styles.visualPdfFrame} />
-                ) : (
-                  <img src={visualFileUrl} alt="Prova visual" style={styles.visualImage} />
-                )}
+            <>
+              <div style={styles.visualPageControls}>
+                <button
+                  type="button"
+                  onClick={() => setVisualCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={visualCurrentPage <= 1}
+                  style={styles.secondaryButton}
+                >
+                  ◀ Página anterior
+                </button>
 
-                {visualFields.map((field, index) => (
+                <strong>
+                  Página {visualCurrentPage} de {visualTotalPages}
+                </strong>
+
+                <button
+                  type="button"
+                  onClick={() => setVisualCurrentPage((prev) => Math.min(visualTotalPages, prev + 1))}
+                  disabled={visualCurrentPage >= visualTotalPages}
+                  style={styles.secondaryButton}
+                >
+                  Próxima página ▶
+                </button>
+              </div>
+
+              <div style={styles.visualWorkspace}>
+                <div
+                  style={styles.visualCanvas}
+                  onClick={adicionarCampoVisualPorClique}
+                  title="Clique para criar um campo de resposta"
+                >
+                  {visualFileUrl.toLowerCase().includes(".pdf") ? (
+                    <iframe
+                      key={`visual-pdf-${visualCurrentPage}`}
+                      src={`${visualFileUrl}#page=${visualCurrentPage}&zoom=page-width`}
+                      style={styles.visualPdfFrame}
+                    />
+                  ) : (
+                    <img src={visualFileUrl} alt="Prova visual" style={styles.visualImage} />
+                  )}
+
+                  {visualFields.filter((field) => Number(field.page_number || 1) === Number(visualCurrentPage)).map((field, index) => (
                   <div
                     key={`${field.question_number}-${field.answer_value}-${index}`}
                     style={{
@@ -2271,7 +2334,7 @@ ${link}`);
                       {field.answer_value ? ` — ${field.answer_value}` : ""}
                     </strong>
                     <small>
-                      x {field.x.toFixed(1)}%, y {field.y.toFixed(1)}%, w {field.width}%, h {field.height}%
+                      pág. {field.page_number || 1} — x {field.x.toFixed(1)}%, y {field.y.toFixed(1)}%, w {field.width}%, h {field.height}%
                     </small>
                     {field.correct_answer && <small>Correta: {field.correct_answer}</small>}
                     <button onClick={() => removerCampoVisual(index)} style={styles.smallRedButton}>
@@ -2281,6 +2344,7 @@ ${link}`);
                 ))}
               </div>
             </div>
+            </>
           ) : (
             <div style={styles.warningBox}>
               Envie o PDF ou imagem da prova para começar a marcar os campos.
@@ -3139,6 +3203,16 @@ const styles: any = {
     gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
     gap: "12px",
     marginBottom: "16px",
+  },
+
+  visualPageControls: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "12px",
+    marginTop: "16px",
+    marginBottom: "12px",
+    flexWrap: "wrap",
   },
 
   visualWorkspace: {
