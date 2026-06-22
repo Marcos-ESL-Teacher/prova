@@ -85,6 +85,7 @@ export default function ExamsAdminPage() {
   const [visualFieldHeight, setVisualFieldHeight] = useState(4);
   const [visualStatus, setVisualStatus] = useState("");
   const [visualSaving, setVisualSaving] = useState(false);
+  const [visualAutoRunning, setVisualAutoRunning] = useState(false);
   const [visualCurrentPage, setVisualCurrentPage] = useState(1);
   const [visualTotalPages, setVisualTotalPages] = useState(1);
 
@@ -528,6 +529,239 @@ export default function ExamsAdminPage() {
 
   function removerCampoVisual(index: number) {
     setVisualFields((prev) => prev.filter((_, i) => i !== index));
+  }
+
+
+  function normalizarRespostaCorretaAutomatica(questionNumber: number) {
+    const examAnswers = provaSelecionada?.answers || {};
+
+    if (!examAnswers || typeof examAnswers !== "object") return "";
+
+    const directKeys = [
+      String(questionNumber),
+      `q${questionNumber}`,
+      `Q${questionNumber}`,
+      `question_${questionNumber}`,
+      `questao_${questionNumber}`,
+    ];
+
+    for (const key of directKeys) {
+      const value = examAnswers[key];
+      if (value !== undefined && value !== null && String(value).trim()) {
+        return String(value).trim();
+      }
+    }
+
+    return "";
+  }
+
+  function encontrarLinhasHorizontaisNoCanvas(canvas: HTMLCanvasElement, pageNumber: number) {
+    const context = canvas.getContext("2d");
+    if (!context) return [] as VisualFieldDraft[];
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const imageData = context.getImageData(0, 0, width, height);
+    const data = imageData.data;
+
+    const darkRuns: Array<{ x1: number; x2: number; y: number }> = [];
+    const minRunWidth = Math.max(80, Math.floor(width * 0.16));
+    const topLimit = Math.floor(height * 0.10);
+    const bottomLimit = Math.floor(height * 0.94);
+
+    for (let y = topLimit; y < bottomLimit; y += 2) {
+      let x = Math.floor(width * 0.04);
+      while (x < Math.floor(width * 0.96)) {
+        let start = -1;
+        while (x < width) {
+          const i = (y * width + x) * 4;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const a = data[i + 3];
+          const isDark = a > 80 && r < 170 && g < 170 && b < 170;
+          if (isDark) {
+            start = x;
+            break;
+          }
+          x++;
+        }
+
+        if (start < 0) break;
+
+        let end = start;
+        let gaps = 0;
+        while (end < width) {
+          const i = (y * width + end) * 4;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const a = data[i + 3];
+          const isDark = a > 80 && r < 170 && g < 170 && b < 170;
+
+          if (!isDark) {
+            gaps++;
+            if (gaps > 8) break;
+          } else {
+            gaps = 0;
+          }
+          end++;
+        }
+
+        if (end - start >= minRunWidth) {
+          darkRuns.push({ x1: start, x2: end, y });
+        }
+
+        x = end + 12;
+      }
+    }
+
+    const merged: Array<{ x1: number; x2: number; y: number }> = [];
+
+    for (const run of darkRuns) {
+      const last = merged[merged.length - 1];
+      if (
+        last &&
+        Math.abs(last.y - run.y) <= 8 &&
+        Math.abs(last.x1 - run.x1) <= 35 &&
+        Math.abs(last.x2 - run.x2) <= 45
+      ) {
+        last.y = Math.round((last.y + run.y) / 2);
+        last.x1 = Math.min(last.x1, run.x1);
+        last.x2 = Math.max(last.x2, run.x2);
+      } else {
+        merged.push({ ...run });
+      }
+    }
+
+    const fields: VisualFieldDraft[] = [];
+    let nextQuestion = visualFields.length > 0
+      ? Math.max(...visualFields.map((field) => Number(field.question_number || 0))) + 1
+      : Number(visualQuestionNumber || 1);
+
+    for (const line of merged) {
+      const lineWidthPct = ((line.x2 - line.x1) / width) * 100;
+      const xPct = ((line.x1 + line.x2) / 2 / width) * 100;
+      const yPct = (line.y / height) * 100;
+
+      if (lineWidthPct < 16 || lineWidthPct > 88) continue;
+      if (yPct < 12 || yPct > 91) continue;
+
+      const tooClose = fields.some((field) => Math.abs(field.y - yPct) < 2.0 && Math.abs(field.x - xPct) < 8);
+      if (tooClose) continue;
+
+      const questionNumber = nextQuestion++;
+      fields.push({
+        page_number: pageNumber,
+        question_number: questionNumber,
+        field_type: "text",
+        answer_value: `q${questionNumber}`,
+        x: Number(xPct.toFixed(3)),
+        y: Number(yPct.toFixed(3)),
+        width: Number(Math.min(78, Math.max(24, lineWidthPct)).toFixed(2)),
+        height: 3.2,
+        correct_answer: normalizarRespostaCorretaAutomatica(questionNumber),
+      });
+    }
+
+    return fields;
+  }
+
+  async function autoCriarCamposDaProva() {
+    if (!provaSelecionada || !visualFileUrl) {
+      alert("Envie primeiro o PDF ou imagem da prova visual.");
+      return;
+    }
+
+    const confirmar = confirm(
+      "A IA automática vai analisar as linhas do PDF e criar campos de lacuna. Deseja substituir os campos atuais da tela?"
+    );
+    if (!confirmar) return;
+
+    try {
+      setVisualAutoRunning(true);
+      setVisualStatus("Analisando PDF e criando campos automaticamente...");
+
+      const generatedFields: VisualFieldDraft[] = [];
+
+      if (visualFileUrl.toLowerCase().includes(".pdf")) {
+        const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+          "pdfjs-dist/legacy/build/pdf.worker.mjs",
+          import.meta.url
+        ).toString();
+
+        const pdf = await pdfjsLib.getDocument({ url: visualFileUrl }).promise;
+        const totalPages = Number(pdf.numPages || visualTotalPages || 1);
+        setVisualTotalPages(totalPages);
+
+        for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
+          setVisualStatus(`Analisando página ${pageNumber} de ${totalPages}...`);
+          const page = await pdf.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: 2.2 });
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          if (!context) continue;
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          await page.render({ canvasContext: context, viewport }).promise;
+          generatedFields.push(...encontrarLinhasHorizontaisNoCanvas(canvas, pageNumber));
+
+          const doubtNumber = 9000 + pageNumber;
+          generatedFields.push({
+            page_number: pageNumber,
+            question_number: doubtNumber,
+            field_type: "essay",
+            answer_value: `doubt_p${pageNumber}`,
+            x: 50,
+            y: 94,
+            width: 78,
+            height: 7,
+            correct_answer: "",
+          });
+        }
+      } else {
+        const image = new Image();
+        image.crossOrigin = "anonymous";
+        await new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () => reject(new Error("Não consegui carregar a imagem para detectar campos."));
+          image.src = visualFileUrl;
+        });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (context) {
+          canvas.width = image.naturalWidth;
+          canvas.height = image.naturalHeight;
+          context.drawImage(image, 0, 0);
+          generatedFields.push(...encontrarLinhasHorizontaisNoCanvas(canvas, 1));
+          generatedFields.push({
+            page_number: 1,
+            question_number: 9001,
+            field_type: "essay",
+            answer_value: "doubt_p1",
+            x: 50,
+            y: 94,
+            width: 78,
+            height: 7,
+            correct_answer: "",
+          });
+        }
+      }
+
+      setVisualFields(generatedFields);
+      setVisualQuestionNumber(
+        generatedFields.filter((field) => field.question_number < 9000).length + 1
+      );
+      setVisualStatus(
+        `Campos automáticos criados: ${generatedFields.length}. Confira a posição, remova o que não quiser e clique em Salvar.`
+      );
+    } catch (error: any) {
+      setVisualStatus("Erro ao criar campos automaticamente: " + (error?.message || String(error)));
+    } finally {
+      setVisualAutoRunning(false);
+    }
   }
 
   async function salvarCamposVisuais() {
@@ -2209,7 +2443,20 @@ ${link}`);
               <label style={styles.smallLabel}>Tipo</label>
               <select
                 value={visualFieldType}
-                onChange={(e) => setVisualFieldType(e.target.value as "choice" | "text" | "essay")}
+                onChange={(e) => {
+                  const nextType = e.target.value as "choice" | "text" | "essay";
+                  setVisualFieldType(nextType);
+                  if (nextType === "choice") {
+                    setVisualFieldWidth(8);
+                    setVisualFieldHeight(4);
+                  } else if (nextType === "text") {
+                    setVisualFieldWidth(42);
+                    setVisualFieldHeight(3.2);
+                  } else {
+                    setVisualFieldWidth(70);
+                    setVisualFieldHeight(10);
+                  }
+                }}
                 style={styles.input}
               >
                 <option value="choice">Alternativa / X</option>
@@ -2261,6 +2508,46 @@ ${link}`);
           </div>
 
           {visualStatus && <div style={styles.statusBox}>{visualStatus}</div>}
+
+          {visualFileUrl && (
+            <div style={styles.importButtons}>
+              <button
+                type="button"
+                onClick={autoCriarCamposDaProva}
+                disabled={visualAutoRunning || visualSaving}
+                style={styles.aiButton}
+              >
+                {visualAutoRunning ? "Analisando..." : "🤖 Auto Criar Campos da Prova"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const total = Math.max(1, Number(visualTotalPages || 1));
+                  const existing = visualFields.filter((field) => Number(field.question_number || 0) < 9000);
+                  const doubts: VisualFieldDraft[] = [];
+                  for (let pageNumber = 1; pageNumber <= total; pageNumber++) {
+                    doubts.push({
+                      page_number: pageNumber,
+                      question_number: 9000 + pageNumber,
+                      field_type: "essay",
+                      answer_value: `doubt_p${pageNumber}`,
+                      x: 50,
+                      y: 94,
+                      width: 78,
+                      height: 7,
+                      correct_answer: "",
+                    });
+                  }
+                  setVisualFields([...existing, ...doubts]);
+                  setVisualStatus("Campo de dúvida em inglês adicionado em todas as páginas.");
+                }}
+                disabled={visualSaving}
+                style={styles.secondaryButton}
+              >
+                💬 Dúvida em inglês em todas as páginas
+              </button>
+            </div>
+          )}
 
           {visualFileUrl ? (
             <>

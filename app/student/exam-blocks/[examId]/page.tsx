@@ -28,7 +28,7 @@ type VisualField = {
   exam_id: string;
   page_number: number;
   question_number: number;
-  field_type: "choice" | "text" | "essay";
+  field_type: "choice" | "text" | "essay" | "doubt";
   answer_value?: string | null;
   x: number;
   y: number;
@@ -188,7 +188,10 @@ export default function StudentExamBlocksPage() {
 
   function getVisualQuestionKeys() {
     const keys = new Set<string>();
-    visualFields.forEach((field) => keys.add(`q${field.question_number}`));
+    visualFields.forEach((field) => {
+      if (Number(field.question_number || 0) >= 9000 || field.answer_value?.startsWith("doubt_")) return;
+      keys.add(`q${field.question_number}`);
+    });
     return Array.from(keys);
   }
 
@@ -413,7 +416,7 @@ export default function StudentExamBlocksPage() {
   }
 
   function renderVisualField(field: VisualField, index: number) {
-    const questionKey = `q${field.question_number}`;
+    const questionKey = field.answer_value?.startsWith("doubt_") ? field.answer_value : `q${field.question_number}`;
     const selectedValue = answers[questionKey] || "";
     const answerValue = (field.answer_value || "").toString().toUpperCase();
 
@@ -444,14 +447,15 @@ export default function StudentExamBlocksPage() {
       );
     }
 
-    if (field.field_type === "essay") {
+    if (field.field_type === "essay" || field.field_type === "doubt") {
+      const isDoubt = field.answer_value?.startsWith("doubt_") || Number(field.question_number || 0) >= 9000;
       return (
         <textarea
           key={field.id || index}
           value={selectedValue}
           onChange={(e) => updateAnswer(questionKey, e.target.value)}
-          style={{ ...baseStyle, ...styles.visualEssayInput }}
-          placeholder={`Q${field.question_number}`}
+          style={{ ...baseStyle, ...styles.visualEssayInput, ...(isDoubt ? styles.visualDoubtInput : {}) }}
+          placeholder={isDoubt ? "Write your question in English here" : `Q${field.question_number}`}
         />
       );
     }
@@ -462,7 +466,7 @@ export default function StudentExamBlocksPage() {
         value={selectedValue}
         onChange={(e) => updateAnswer(questionKey, e.target.value)}
         style={{ ...baseStyle, ...styles.visualTextInput }}
-        placeholder={`Q${field.question_number}`}
+        placeholder=""
       />
     );
   }
@@ -1011,15 +1015,15 @@ const styles: any = {
   visualAnswerField: {
     position: "absolute",
     transform: "translate(-50%, -50%)",
-    border: "2px solid #2563eb",
-    background: "rgba(255,255,255,0.45)",
+    border: "1px solid rgba(37, 99, 235, 0.65)",
+    background: "rgba(255,255,255,0.25)",
     color: "#111827",
-    borderRadius: "6px",
+    borderRadius: "4px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     fontWeight: "bold",
-    fontSize: "20px",
+    fontSize: "18px",
     cursor: "pointer",
     outline: "none",
     zIndex: 5,
@@ -1032,16 +1036,28 @@ const styles: any = {
   },
 
   visualTextInput: {
-    padding: "4px 6px",
+    padding: "0 6px 1px",
     fontSize: "15px",
     textAlign: "center",
-    background: "rgba(255,255,255,0.85)",
+    background: "rgba(255,255,255,0.15)",
+    border: "none",
+    borderBottom: "2px solid #2563eb",
+    borderRadius: 0,
+    height: "100%",
+    boxShadow: "none",
   },
 
   visualEssayInput: {
     padding: "6px",
     fontSize: "14px",
     resize: "none",
-    background: "rgba(255,255,255,0.9)",
+    background: "rgba(255,255,255,0.88)",
+    border: "2px solid #2563eb",
+  },
+
+  visualDoubtInput: {
+    background: "rgba(255,255,255,0.96)",
+    border: "2px dashed #2563eb",
+    fontSize: "13px",
   },
 };
