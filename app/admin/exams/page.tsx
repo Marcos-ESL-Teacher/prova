@@ -55,6 +55,8 @@ export default function ExamsAdminPage() {
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrStatus, setOcrStatus] = useState("");
   const [answerKeyStatus, setAnswerKeyStatus] = useState("");
+  const [aiRunning, setAiRunning] = useState(false);
+  const [aiStatus, setAiStatus] = useState("");
   const [parserMode, setParserMode] = useState<ParserMode>("sbs");
   const [ocrMode, setOcrMode] = useState<OcrMode>("columns");
   const [showImporter, setShowImporter] = useState(false);
@@ -362,7 +364,9 @@ ${link}`);
     setBlocks([]);
     setOcrStatus("");
     setAnswerKeyStatus("");
+    setAiStatus("");
     setOcrRunning(false);
+    setAiRunning(false);
     setSaving(false);
   }
 
@@ -461,15 +465,23 @@ ${link}`);
     const lowerQuestion = questionText.toLowerCase();
 
     if (
+      lowerSection.includes("choose") ||
       lowerSection.includes("which word") ||
-      lowerQuestion.includes("_____") ||
-      lowerQuestion.includes("____") ||
-      lowerQuestion.includes("___")
+      lowerQuestion.match(/\bchoose\b/)
     ) {
       return "multiple_choice";
     }
 
-    return "multiple_choice";
+    if (
+      lowerQuestion.includes("_____") ||
+      lowerQuestion.includes("____") ||
+      lowerQuestion.includes("___") ||
+      /\([^)]*\/[^)]*\)/.test(questionText)
+    ) {
+      return "fill_blank";
+    }
+
+    return "fill_blank";
   }
 
   async function recognizeCanvas(canvas: HTMLCanvasElement, label: string) {
@@ -1343,6 +1355,56 @@ ${link}`);
     }));
   }
 
+  async function improveRawTextWithAI() {
+    if (!provaSelecionada) {
+      alert("Selecione uma prova antes de corrigir com IA.");
+      return;
+    }
+
+    if (!rawText.trim()) {
+      alert("Cole ou importe o texto da prova antes de usar a IA.");
+      return;
+    }
+
+    try {
+      setAiRunning(true);
+      setAiStatus("Corrigindo e organizando texto com IA...");
+
+      const response = await fetch("/api/import-exam-ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rawText,
+          parserMode,
+          examTitle: provaSelecionada?.title || "",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.message || "Erro ao corrigir texto com IA.");
+      }
+
+      const cleanedText = String(data.cleanedText || "").trim();
+
+      if (!cleanedText) {
+        throw new Error("A IA não retornou texto corrigido.");
+      }
+
+      setRawText(normalizeOcrText(cleanedText));
+      setBlocks([]);
+      setAiStatus("Texto corrigido. Agora clique em Gerar Blocos.");
+    } catch (error: any) {
+      alert("Erro na IA: " + (error?.message || String(error)));
+      setAiStatus("Erro ao corrigir texto com IA.");
+    } finally {
+      setAiRunning(false);
+    }
+  }
+
   function generateBlocks() {
     if (!provaSelecionada) {
       alert("Selecione uma prova antes de gerar blocos.");
@@ -1729,12 +1791,10 @@ ${link}`);
                   </button>
 
                   <button
-                    onClick={() => {
-                      alert("Função futura: usar IA para melhorar OCR e organizar blocos automaticamente.");
-                    }}
+                    onClick={() => selecionarProvaParaImportar(p)}
                     style={styles.aiButton}
                   >
-                    🧠 IA Futuro
+                    🧠 IA Import
                   </button>
 
                   <button onClick={() => copiarLink(p)} style={styles.copyButton}>
@@ -1873,10 +1933,20 @@ ${link}`);
               style={styles.largeTextarea}
               placeholder="Cole aqui o texto do PDF..."
             />
+
+            <button
+              onClick={improveRawTextWithAI}
+              style={styles.aiWideButton}
+              disabled={aiRunning || ocrRunning || !rawText.trim()}
+            >
+              {aiRunning ? "Corrigindo com IA..." : "🧠 Corrigir Texto com IA"}
+            </button>
+
+            {aiStatus && <div style={styles.aiStatusBox}>{aiStatus}</div>}
           </div>
 
           <div style={styles.importButtons}>
-            <button onClick={generateBlocks} style={styles.generateButton} disabled={ocrRunning}>
+            <button onClick={generateBlocks} style={styles.generateButton} disabled={ocrRunning || aiRunning}>
               ⚙️ Gerar Blocos
             </button>
 
@@ -2312,6 +2382,28 @@ const styles: any = {
     border: "none",
     borderRadius: "8px",
     cursor: "pointer",
+  },
+
+  aiWideButton: {
+    width: "100%",
+    padding: "12px 16px",
+    background: "#9333ea",
+    color: "#fff",
+    border: "none",
+    borderRadius: "10px",
+    cursor: "pointer",
+    fontWeight: "bold",
+    marginBottom: "10px",
+  },
+
+  aiStatusBox: {
+    marginTop: "10px",
+    background: "#faf5ff",
+    color: "#6b21a8",
+    border: "1px solid #d8b4fe",
+    padding: "12px",
+    borderRadius: "10px",
+    fontWeight: "bold",
   },
 
   copyButton: {
