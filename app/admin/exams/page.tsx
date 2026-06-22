@@ -32,6 +32,20 @@ type ExtractedOptions = {
   e?: string | null;
 };
 
+
+type VisualFieldDraft = {
+  id?: string;
+  page_number: number;
+  question_number: number;
+  field_type: "choice" | "text" | "essay";
+  answer_value: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  correct_answer?: string | null;
+};
+
 export default function ExamsAdminPage() {
   const [colecoes, setColecoes] = useState<any[]>([]);
   const [livros, setLivros] = useState<any[]>([]);
@@ -60,6 +74,17 @@ export default function ExamsAdminPage() {
   const [parserMode, setParserMode] = useState<ParserMode>("sbs");
   const [ocrMode, setOcrMode] = useState<OcrMode>("columns");
   const [showImporter, setShowImporter] = useState(false);
+  const [showVisualEditor, setShowVisualEditor] = useState(false);
+  const [visualFileUrl, setVisualFileUrl] = useState("");
+  const [visualFields, setVisualFields] = useState<VisualFieldDraft[]>([]);
+  const [visualQuestionNumber, setVisualQuestionNumber] = useState(1);
+  const [visualFieldType, setVisualFieldType] = useState<"choice" | "text" | "essay">("choice");
+  const [visualAnswerValue, setVisualAnswerValue] = useState("A");
+  const [visualCorrectAnswer, setVisualCorrectAnswer] = useState("");
+  const [visualFieldWidth, setVisualFieldWidth] = useState(8);
+  const [visualFieldHeight, setVisualFieldHeight] = useState(4);
+  const [visualStatus, setVisualStatus] = useState("");
+  const [visualSaving, setVisualSaving] = useState(false);
 
   useEffect(() => {
     carregarColecoes();
@@ -86,6 +111,7 @@ export default function ExamsAdminPage() {
     setSlotSelecionado(null);
     setProvaSelecionada(null);
     setShowImporter(false);
+    setShowVisualEditor(false);
     setLivros([]);
     setPastas([]);
     setSlots([]);
@@ -108,6 +134,7 @@ export default function ExamsAdminPage() {
     setSlotSelecionado(null);
     setProvaSelecionada(null);
     setShowImporter(false);
+    setShowVisualEditor(false);
     setPastas([]);
     setSlots([]);
     setProvas([]);
@@ -128,6 +155,7 @@ export default function ExamsAdminPage() {
     setSlotSelecionado(null);
     setProvaSelecionada(null);
     setShowImporter(false);
+    setShowVisualEditor(false);
     setSlots([]);
     setProvas([]);
     resetImporter();
@@ -146,6 +174,7 @@ export default function ExamsAdminPage() {
     setSlotSelecionado(slot);
     setProvaSelecionada(null);
     setShowImporter(false);
+    setShowVisualEditor(false);
     setProvas([]);
     resetImporter();
 
@@ -223,6 +252,7 @@ export default function ExamsAdminPage() {
     setSlotSelecionado(null);
     setProvaSelecionada(null);
     setShowImporter(false);
+    setShowVisualEditor(false);
     setProvas([]);
     resetImporter();
     await abrirPasta(pastaSelecionada);
@@ -265,6 +295,7 @@ export default function ExamsAdminPage() {
     if (provaSelecionada?.id === id) {
       setProvaSelecionada(null);
       setShowImporter(false);
+      setShowVisualEditor(false);
       resetImporter();
     }
 
@@ -294,6 +325,7 @@ export default function ExamsAdminPage() {
 
   function selecionarProvaParaImportar(prova: any) {
     setProvaSelecionada(prova);
+    setShowVisualEditor(false);
     setShowImporter(true);
     resetImporter();
     setTimeout(() => {
@@ -302,6 +334,249 @@ export default function ExamsAdminPage() {
         block: "start",
       });
     }, 100);
+  }
+
+  async function selecionarProvaVisualInterativa(prova: any) {
+    setProvaSelecionada(prova);
+    setShowImporter(false);
+    setShowVisualEditor(true);
+    setVisualStatus("");
+    setVisualFields([]);
+    setVisualFileUrl("");
+
+    const rawPdfValue = prova.pdf_url || prova.pdf_storage_path || "";
+    if (rawPdfValue) {
+      await carregarArquivoVisual(rawPdfValue);
+    }
+
+    await carregarCamposVisuais(prova.id);
+
+    setTimeout(() => {
+      document.getElementById("editor-visual-interativo")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 100);
+  }
+
+  async function carregarArquivoVisual(pdfValue: string) {
+    if (!pdfValue) {
+      setVisualFileUrl("");
+      return;
+    }
+
+    if (pdfValue.startsWith("http://") || pdfValue.startsWith("https://")) {
+      setVisualFileUrl(pdfValue);
+      return;
+    }
+
+    const { data, error } = await supabase.storage
+      .from("exam-pdfs")
+      .createSignedUrl(pdfValue, 60 * 60 * 6);
+
+    if (error) {
+      setVisualStatus("Não consegui abrir o arquivo visual: " + error.message);
+      return;
+    }
+
+    setVisualFileUrl(data.signedUrl);
+  }
+
+  async function carregarCamposVisuais(examId: string) {
+    const { data, error } = await supabase
+      .from("exam_visual_fields")
+      .select("*")
+      .eq("exam_id", examId)
+      .order("question_number", { ascending: true });
+
+    if (error) {
+      setVisualStatus("Erro ao carregar campos visuais: " + error.message);
+      return;
+    }
+
+    setVisualFields(
+      (data || []).map((field: any) => ({
+        id: field.id,
+        page_number: Number(field.page_number || 1),
+        question_number: Number(field.question_number || 1),
+        field_type: field.field_type || "choice",
+        answer_value: field.answer_value || "",
+        x: Number(field.x || 0),
+        y: Number(field.y || 0),
+        width: Number(field.width || 8),
+        height: Number(field.height || 4),
+        correct_answer: field.correct_answer || "",
+      }))
+    );
+  }
+
+  async function enviarArquivoVisual(file: File) {
+    if (!provaSelecionada) return;
+
+    setVisualSaving(true);
+    setVisualStatus("Enviando arquivo da prova visual...");
+
+    const safeName = file.name
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9.\-_]/g, "-");
+    const storagePath = `${provaSelecionada.id}/${Date.now()}-${safeName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("exam-pdfs")
+      .upload(storagePath, file, { upsert: true });
+
+    if (uploadError) {
+      setVisualSaving(false);
+      setVisualStatus("Erro no upload: " + uploadError.message);
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from("exams")
+      .update({
+        pdf_url: storagePath,
+        visual_enabled: true,
+        exam_mode: "visual",
+      })
+      .eq("id", provaSelecionada.id);
+
+    setVisualSaving(false);
+
+    if (updateError) {
+      setVisualStatus("Upload feito, mas erro ao salvar na prova: " + updateError.message);
+      return;
+    }
+
+    const provaAtualizada = {
+      ...provaSelecionada,
+      pdf_url: storagePath,
+      visual_enabled: true,
+      exam_mode: "visual",
+    };
+
+    setProvaSelecionada(provaAtualizada);
+    setProvas((prev) => prev.map((p) => (p.id === provaSelecionada.id ? provaAtualizada : p)));
+    await carregarArquivoVisual(storagePath);
+    setVisualStatus("Arquivo salvo. Agora clique sobre a prova para criar os campos de resposta.");
+  }
+
+  function adicionarCampoVisualPorClique(event: any) {
+    if (!provaSelecionada || !visualFileUrl) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+
+    const field: VisualFieldDraft = {
+      page_number: 1,
+      question_number: Number(visualQuestionNumber || 1),
+      field_type: visualFieldType,
+      answer_value: visualFieldType === "choice" ? visualAnswerValue.trim().toUpperCase() || "A" : `q${visualQuestionNumber}`,
+      x: Number(x.toFixed(3)),
+      y: Number(y.toFixed(3)),
+      width: Number(visualFieldWidth || 8),
+      height: Number(visualFieldHeight || 4),
+      correct_answer: visualCorrectAnswer.trim(),
+    };
+
+    setVisualFields((prev) => [...prev, field]);
+
+    if (visualFieldType === "choice") {
+      const next = String.fromCharCode((visualAnswerValue.trim().toUpperCase() || "A").charCodeAt(0) + 1);
+      if (["A", "B", "C", "D", "E"].includes(next)) {
+        setVisualAnswerValue(next);
+      }
+    } else {
+      setVisualQuestionNumber((prev) => Number(prev || 1) + 1);
+    }
+  }
+
+  function removerCampoVisual(index: number) {
+    setVisualFields((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function salvarCamposVisuais() {
+    if (!provaSelecionada) return;
+
+    if (!provaSelecionada.pdf_url && !provaSelecionada.pdf_storage_path) {
+      alert("Envie primeiro o PDF ou imagem da prova visual.");
+      return;
+    }
+
+    setVisualSaving(true);
+    setVisualStatus("Salvando campos visuais...");
+
+    const { error: deleteError } = await supabase
+      .from("exam_visual_fields")
+      .delete()
+      .eq("exam_id", provaSelecionada.id);
+
+    if (deleteError) {
+      setVisualSaving(false);
+      setVisualStatus("Erro ao apagar campos antigos: " + deleteError.message);
+      return;
+    }
+
+    if (visualFields.length > 0) {
+      const rows = visualFields.map((field) => ({
+        exam_id: provaSelecionada.id,
+        page_number: field.page_number || 1,
+        question_number: Number(field.question_number || 1),
+        field_type: field.field_type,
+        answer_value: field.answer_value || "",
+        x: Number(field.x),
+        y: Number(field.y),
+        width: Number(field.width || 8),
+        height: Number(field.height || 4),
+        correct_answer: field.correct_answer || "",
+      }));
+
+      const { error: insertError } = await supabase
+        .from("exam_visual_fields")
+        .insert(rows);
+
+      if (insertError) {
+        setVisualSaving(false);
+        setVisualStatus("Erro ao inserir campos: " + insertError.message);
+        return;
+      }
+    }
+
+    const { error: examError } = await supabase
+      .from("exams")
+      .update({ visual_enabled: true, exam_mode: "visual" })
+      .eq("id", provaSelecionada.id);
+
+    setVisualSaving(false);
+
+    if (examError) {
+      setVisualStatus("Campos salvos, mas erro ao ativar modo visual: " + examError.message);
+      return;
+    }
+
+    setVisualStatus("Prova Visual Interativa salva com sucesso.");
+    await carregarCamposVisuais(provaSelecionada.id);
+  }
+
+  async function transformarEmProvaNormal(prova: any) {
+    const confirmar = confirm(
+      "Deseja desativar o modo visual desta prova? As questões normais continuarão existindo se já foram cadastradas."
+    );
+
+    if (!confirmar) return;
+
+    const { error } = await supabase
+      .from("exams")
+      .update({ visual_enabled: false, exam_mode: "standard" })
+      .eq("id", prova.id);
+
+    if (error) {
+      alert("Erro ao desativar modo visual: " + error.message);
+      return;
+    }
+
+    await abrirSlot(slotSelecionado);
   }
 
   function getStudentLink(provaId: string) {
@@ -1797,6 +2072,22 @@ ${link}`);
                     🧠 IA Import
                   </button>
 
+                  <button
+                    onClick={() => selecionarProvaVisualInterativa(p)}
+                    style={styles.visualButton}
+                  >
+                    🖼️ Prova Visual Interativa
+                  </button>
+
+                  {(p.visual_enabled || p.exam_mode === "visual") && (
+                    <button
+                      onClick={() => transformarEmProvaNormal(p)}
+                      style={styles.normalButton}
+                    >
+                      ↩️ Modo Normal
+                    </button>
+                  )}
+
                   <button onClick={() => copiarLink(p)} style={styles.copyButton}>
                     🔗 Copiar Link
                   </button>
@@ -1823,6 +2114,193 @@ ${link}`);
                 </div>
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {showVisualEditor && provaSelecionada && (
+        <section id="editor-visual-interativo" style={styles.importerCard}>
+          <div style={styles.importerHeader}>
+            <div>
+              <h2 style={styles.cardTitle}>🖼️ Prova Visual Interativa</h2>
+              <p style={styles.subtitle}>
+                Prova: <strong>{provaSelecionada.title}</strong>
+              </p>
+              <p style={styles.subtitle}>Exam ID: {provaSelecionada.id}</p>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowVisualEditor(false);
+                setVisualStatus("");
+              }}
+              style={styles.closeButton}
+            >
+              Fechar Editor Visual
+            </button>
+          </div>
+
+          <div style={styles.visualHelpBox}>
+            <strong>Como usar:</strong> envie o PDF ou imagem da prova, depois clique exatamente em cima das alternativas ou lacunas. Cada clique cria um campo interativo para o aluno responder em cima da própria prova.
+          </div>
+
+          <div style={styles.uploadBox}>
+            <h3>1) Enviar PDF ou imagem original da prova</h3>
+            <p>Este arquivo será salvo em <strong>exams.pdf_url</strong> e aparecerá para o aluno.</p>
+            <input
+              type="file"
+              accept="application/pdf,image/png,image/jpeg,image/jpg,image/webp"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) enviarArquivoVisual(file);
+              }}
+              style={styles.input}
+              disabled={visualSaving}
+            />
+          </div>
+
+          <div style={styles.visualControls}>
+            <div>
+              <label style={styles.smallLabel}>Nº da questão</label>
+              <input
+                type="number"
+                min="1"
+                value={visualQuestionNumber}
+                onChange={(e) => setVisualQuestionNumber(Number(e.target.value || 1))}
+                style={styles.input}
+              />
+            </div>
+
+            <div>
+              <label style={styles.smallLabel}>Tipo</label>
+              <select
+                value={visualFieldType}
+                onChange={(e) => setVisualFieldType(e.target.value as "choice" | "text" | "essay")}
+                style={styles.input}
+              >
+                <option value="choice">Alternativa / X</option>
+                <option value="text">Lacuna / texto curto</option>
+                <option value="essay">Resposta longa</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={styles.smallLabel}>Valor da alternativa</label>
+              <input
+                value={visualAnswerValue}
+                onChange={(e) => setVisualAnswerValue(e.target.value)}
+                style={styles.input}
+                placeholder="A, B, C, D..."
+                disabled={visualFieldType !== "choice"}
+              />
+            </div>
+
+            <div>
+              <label style={styles.smallLabel}>Resposta correta</label>
+              <input
+                value={visualCorrectAnswer}
+                onChange={(e) => setVisualCorrectAnswer(e.target.value)}
+                style={styles.input}
+                placeholder="Ex: B ou resposta da lacuna"
+              />
+            </div>
+
+            <div>
+              <label style={styles.smallLabel}>Largura %</label>
+              <input
+                type="number"
+                value={visualFieldWidth}
+                onChange={(e) => setVisualFieldWidth(Number(e.target.value || 8))}
+                style={styles.input}
+              />
+            </div>
+
+            <div>
+              <label style={styles.smallLabel}>Altura %</label>
+              <input
+                type="number"
+                value={visualFieldHeight}
+                onChange={(e) => setVisualFieldHeight(Number(e.target.value || 4))}
+                style={styles.input}
+              />
+            </div>
+          </div>
+
+          {visualStatus && <div style={styles.statusBox}>{visualStatus}</div>}
+
+          {visualFileUrl ? (
+            <div style={styles.visualWorkspace}>
+              <div
+                style={styles.visualCanvas}
+                onClick={adicionarCampoVisualPorClique}
+                title="Clique para criar um campo de resposta"
+              >
+                {visualFileUrl.toLowerCase().includes(".pdf") ? (
+                  <iframe src={visualFileUrl} style={styles.visualPdfFrame} />
+                ) : (
+                  <img src={visualFileUrl} alt="Prova visual" style={styles.visualImage} />
+                )}
+
+                {visualFields.map((field, index) => (
+                  <div
+                    key={`${field.question_number}-${field.answer_value}-${index}`}
+                    style={{
+                      ...styles.visualOverlayField,
+                      left: `${field.x}%`,
+                      top: `${field.y}%`,
+                      width: `${field.width}%`,
+                      height: `${field.height}%`,
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {field.field_type === "choice" ? "X" : `Q${field.question_number}`}
+                  </div>
+                ))}
+              </div>
+
+              <div style={styles.visualFieldList}>
+                <h3>Campos criados ({visualFields.length})</h3>
+                {visualFields.length === 0 && (
+                  <p style={styles.empty}>Clique sobre a prova para criar o primeiro campo.</p>
+                )}
+
+                {visualFields.map((field, index) => (
+                  <div key={index} style={styles.visualFieldItem}>
+                    <strong>
+                      Q{field.question_number} — {field.field_type}
+                      {field.answer_value ? ` — ${field.answer_value}` : ""}
+                    </strong>
+                    <small>
+                      x {field.x.toFixed(1)}%, y {field.y.toFixed(1)}%, w {field.width}%, h {field.height}%
+                    </small>
+                    {field.correct_answer && <small>Correta: {field.correct_answer}</small>}
+                    <button onClick={() => removerCampoVisual(index)} style={styles.smallRedButton}>
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={styles.warningBox}>
+              Envie o PDF ou imagem da prova para começar a marcar os campos.
+            </div>
+          )}
+
+          <div style={styles.importButtons}>
+            <button onClick={salvarCamposVisuais} disabled={visualSaving} style={styles.saveButton}>
+              {visualSaving ? "Salvando..." : "💾 Salvar Prova Visual Interativa"}
+            </button>
+
+            <button
+              onClick={() => {
+                setVisualFields([]);
+                setVisualStatus("Campos removidos da tela. Clique em salvar para apagar no banco.");
+              }}
+              style={styles.secondaryButton}
+            >
+              Limpar campos
+            </button>
           </div>
         </section>
       )}
@@ -2406,6 +2884,24 @@ const styles: any = {
     fontWeight: "bold",
   },
 
+  visualButton: {
+    padding: "8px 10px",
+    background: "#ea580c",
+    color: "#fff",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+  },
+
+  normalButton: {
+    padding: "8px 10px",
+    background: "#334155",
+    color: "#fff",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+  },
+
   copyButton: {
     padding: "8px 10px",
     background: "#0284c7",
@@ -2627,5 +3123,97 @@ const styles: any = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
     gap: "10px",
+  },
+
+  visualHelpBox: {
+    background: "#fff7ed",
+    border: "1px solid #fed7aa",
+    color: "#9a3412",
+    padding: "12px",
+    borderRadius: "10px",
+    marginBottom: "16px",
+  },
+
+  visualControls: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: "12px",
+    marginBottom: "16px",
+  },
+
+  visualWorkspace: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) 320px",
+    gap: "16px",
+    alignItems: "start",
+    marginTop: "16px",
+    marginBottom: "16px",
+  },
+
+  visualCanvas: {
+    position: "relative",
+    width: "100%",
+    minHeight: "760px",
+    background: "#e5e7eb",
+    border: "2px dashed #fb923c",
+    borderRadius: "12px",
+    overflow: "hidden",
+    cursor: "crosshair",
+  },
+
+  visualPdfFrame: {
+    width: "100%",
+    height: "900px",
+    border: "none",
+    background: "#fff",
+    pointerEvents: "none",
+  },
+
+  visualImage: {
+    width: "100%",
+    display: "block",
+    pointerEvents: "none",
+  },
+
+  visualOverlayField: {
+    position: "absolute",
+    transform: "translate(-50%, -50%)",
+    border: "2px solid #dc2626",
+    background: "rgba(254, 226, 226, 0.55)",
+    color: "#991b1b",
+    borderRadius: "8px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "bold",
+    fontSize: "18px",
+  },
+
+  visualFieldList: {
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: "12px",
+    padding: "14px",
+    maxHeight: "900px",
+    overflow: "auto",
+  },
+
+  visualFieldItem: {
+    display: "grid",
+    gap: "6px",
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: "10px",
+    padding: "10px",
+    marginBottom: "10px",
+  },
+
+  warningBox: {
+    background: "#fff7ed",
+    border: "1px solid #fed7aa",
+    color: "#9a3412",
+    padding: "16px",
+    borderRadius: "10px",
+    marginBottom: "18px",
   },
 };

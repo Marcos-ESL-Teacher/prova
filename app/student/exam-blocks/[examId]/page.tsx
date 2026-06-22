@@ -23,12 +23,27 @@ type ExamBlock = {
   is_active?: boolean | null;
 };
 
+type VisualField = {
+  id: string;
+  exam_id: string;
+  page_number: number;
+  question_number: number;
+  field_type: "choice" | "text" | "essay";
+  answer_value?: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  correct_answer?: string | null;
+};
+
 export default function StudentExamBlocksPage() {
   const params = useParams();
   const examId = params.examId as string;
 
   const [exam, setExam] = useState<any>(null);
   const [blocks, setBlocks] = useState<ExamBlock[]>([]);
+  const [visualFields, setVisualFields] = useState<VisualField[]>([]);
   const [pdfUrl, setPdfUrl] = useState("");
   const [studentName, setStudentName] = useState("");
   const [studentPhone, setStudentPhone] = useState("");
@@ -40,6 +55,7 @@ export default function StudentExamBlocksPage() {
 
   useEffect(() => {
     loadPageData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadPageData() {
@@ -59,8 +75,9 @@ export default function StudentExamBlocksPage() {
 
     setExam(examData);
 
-    if (examData?.pdf_storage_path) {
-      await loadPdf(examData.pdf_storage_path);
+    const pdfValue = examData?.pdf_url || examData?.pdf_storage_path || "";
+    if (pdfValue) {
+      await loadPdf(pdfValue);
     }
 
     const { data: blocksData, error: blocksError } = await supabase
@@ -77,34 +94,86 @@ export default function StudentExamBlocksPage() {
     }
 
     setBlocks(blocksData || []);
+
+    const { data: fieldsData, error: fieldsError } = await supabase
+      .from("exam_visual_fields")
+      .select("*")
+      .eq("exam_id", examId)
+      .order("question_number", { ascending: true });
+
+    if (!fieldsError) {
+      setVisualFields(
+        (fieldsData || []).map((field: any) => ({
+          id: field.id,
+          exam_id: field.exam_id,
+          page_number: Number(field.page_number || 1),
+          question_number: Number(field.question_number || 1),
+          field_type: field.field_type || "choice",
+          answer_value: field.answer_value || "",
+          x: Number(field.x || 0),
+          y: Number(field.y || 0),
+          width: Number(field.width || 8),
+          height: Number(field.height || 4),
+          correct_answer: field.correct_answer || "",
+        }))
+      );
+    }
+
     setLoading(false);
   }
 
-  async function loadPdf(pdfStoragePath: string) {
+  async function loadPdf(pdfStoragePathOrUrl: string) {
+    if (!pdfStoragePathOrUrl) return;
+
+    if (
+      pdfStoragePathOrUrl.startsWith("http://") ||
+      pdfStoragePathOrUrl.startsWith("https://")
+    ) {
+      setPdfUrl(pdfStoragePathOrUrl);
+      return;
+    }
+
     const { data, error } = await supabase.storage
       .from("exam-pdfs")
-      .createSignedUrl(pdfStoragePath, 60 * 60 * 4);
+      .createSignedUrl(pdfStoragePathOrUrl, 60 * 60 * 4);
 
     if (error) {
-      console.log("Erro ao carregar PDF:", error.message);
+      console.log("Erro ao carregar PDF/imagem:", error.message);
       return;
     }
 
     setPdfUrl(data.signedUrl);
   }
 
+  function isVisualExam() {
+    return exam?.exam_mode === "visual" || exam?.visual_enabled === true;
+  }
+
   function getQuestionBlocks() {
     return blocks.filter((block) => block.block_type === "question");
   }
 
-  function updateAnswer(blockId: string, value: string) {
+  function getVisualQuestionKeys() {
+    const keys = new Set<string>();
+    visualFields.forEach((field) => keys.add(`q${field.question_number}`));
+    return Array.from(keys);
+  }
+
+  function updateAnswer(questionKey: string, value: string) {
     setAnswers((prev) => ({
       ...prev,
-      [blockId]: value,
+      [questionKey]: value,
     }));
   }
 
   function countAnsweredQuestions() {
+    if (isVisualExam()) {
+      return getVisualQuestionKeys().filter((key) => {
+        const value = answers[key];
+        return value !== undefined && value.toString().trim() !== "";
+      }).length;
+    }
+
     const questionBlocks = getQuestionBlocks();
 
     return questionBlocks.filter((block) => {
@@ -119,31 +188,53 @@ export default function StudentExamBlocksPage() {
       return;
     }
 
-    const questionBlocks = getQuestionBlocks();
+    let finalAnswers: Record<string, string> = {};
+    let totalQuestions = 0;
+    let unansweredCount = 0;
 
-    if (questionBlocks.length === 0) {
-      alert("Esta prova digital ainda não tem questões cadastradas.");
-      return;
+    if (isVisualExam()) {
+      const questionKeys = getVisualQuestionKeys();
+      totalQuestions = questionKeys.length;
+
+      if (!pdfUrl || visualFields.length === 0) {
+        alert("Esta prova visual ainda não foi configurada pelo professor.");
+        return;
+      }
+
+      questionKeys.forEach((key) => {
+        finalAnswers[key] = answers[key] || "";
+      });
+
+      unansweredCount = questionKeys.filter((key) => {
+        const value = answers[key];
+        return value === undefined || value.toString().trim() === "";
+      }).length;
+    } else {
+      const questionBlocks = getQuestionBlocks();
+      totalQuestions = questionBlocks.length;
+
+      if (questionBlocks.length === 0) {
+        alert("Esta prova digital ainda não tem questões cadastradas.");
+        return;
+      }
+
+      questionBlocks.forEach((block) => {
+        finalAnswers[block.id] = answers[block.id] || "";
+      });
+
+      unansweredCount = questionBlocks.filter((block) => {
+        const value = answers[block.id];
+        return value === undefined || value.toString().trim() === "";
+      }).length;
     }
 
-    const unanswered = questionBlocks.filter((block) => {
-      const value = answers[block.id];
-      return value === undefined || value.toString().trim() === "";
-    });
-
-    if (unanswered.length > 0) {
+    if (unansweredCount > 0) {
       const confirmSend = window.confirm(
-        `Você deixou ${unanswered.length} questão(ões) sem resposta.\n\nDeseja enviar mesmo assim?`
+        `Você deixou ${unansweredCount} de ${totalQuestions} questão(ões) sem resposta.\n\nDeseja enviar mesmo assim?`
       );
 
       if (!confirmSend) return;
     }
-
-    const finalAnswers: Record<string, string> = {};
-
-    questionBlocks.forEach((block) => {
-      finalAnswers[block.id] = answers[block.id] || "";
-    });
 
     const generatedProtocol = `SUB-${Date.now()}.${Math.floor(
       Math.random() * 1000000
@@ -288,6 +379,93 @@ export default function StudentExamBlocksPage() {
     return null;
   }
 
+  function renderVisualField(field: VisualField, index: number) {
+    const questionKey = `q${field.question_number}`;
+    const selectedValue = answers[questionKey] || "";
+    const answerValue = (field.answer_value || "").toString().toUpperCase();
+
+    const baseStyle = {
+      ...styles.visualAnswerField,
+      left: `${field.x}%`,
+      top: `${field.y}%`,
+      width: `${field.width}%`,
+      height: `${field.height}%`,
+    };
+
+    if (field.field_type === "choice") {
+      const selected = selectedValue.toUpperCase() === answerValue;
+
+      return (
+        <button
+          key={field.id || index}
+          type="button"
+          onClick={() => updateAnswer(questionKey, answerValue)}
+          style={{
+            ...baseStyle,
+            ...(selected ? styles.visualChoiceSelected : {}),
+          }}
+          title={`Questão ${field.question_number} - ${answerValue}`}
+        >
+          {selected ? "X" : ""}
+        </button>
+      );
+    }
+
+    if (field.field_type === "essay") {
+      return (
+        <textarea
+          key={field.id || index}
+          value={selectedValue}
+          onChange={(e) => updateAnswer(questionKey, e.target.value)}
+          style={{ ...baseStyle, ...styles.visualEssayInput }}
+          placeholder={`Q${field.question_number}`}
+        />
+      );
+    }
+
+    return (
+      <input
+        key={field.id || index}
+        value={selectedValue}
+        onChange={(e) => updateAnswer(questionKey, e.target.value)}
+        style={{ ...baseStyle, ...styles.visualTextInput }}
+        placeholder={`Q${field.question_number}`}
+      />
+    );
+  }
+
+  function renderVisualExam() {
+    return (
+      <div style={styles.visualExamBox}>
+        <h2 style={styles.digitalExamTitle}>Prova Visual Interativa</h2>
+
+        {!pdfUrl && (
+          <div style={styles.warningBox}>
+            Esta prova visual ainda não possui PDF/imagem associado.
+          </div>
+        )}
+
+        {pdfUrl && visualFields.length === 0 && (
+          <div style={styles.warningBox}>
+            O professor ainda não marcou os campos clicáveis desta prova.
+          </div>
+        )}
+
+        {pdfUrl && (
+          <div style={styles.visualPaper}>
+            {pdfUrl.toLowerCase().includes(".pdf") ? (
+              <iframe src={pdfUrl} style={styles.visualPdfFrame} />
+            ) : (
+              <img src={pdfUrl} alt="Prova" style={styles.visualImage} />
+            )}
+
+            {visualFields.map((field, index) => renderVisualField(field, index))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div style={styles.page}>
@@ -324,7 +502,9 @@ export default function StudentExamBlocksPage() {
     );
   }
 
-  const totalQuestions = getQuestionBlocks().length;
+  const totalQuestions = isVisualExam()
+    ? getVisualQuestionKeys().length
+    : getQuestionBlocks().length;
   const answeredQuestions = countAnsweredQuestions();
 
   return (
@@ -378,28 +558,34 @@ export default function StudentExamBlocksPage() {
           </div>
         </div>
 
-        {pdfUrl && (
-          <details style={styles.pdfDetails}>
-            <summary style={styles.pdfSummary}>📄 Ver PDF original</summary>
-            <iframe src={pdfUrl} width="100%" height="850" style={styles.iframe} />
-          </details>
-        )}
-
         <div style={styles.progressBox}>
           <strong>Progresso:</strong> {answeredQuestions} de {totalQuestions} questões respondidas
         </div>
 
-        <div style={styles.digitalExamBox}>
-          <h2 style={styles.digitalExamTitle}>Prova Digital</h2>
+        {isVisualExam() ? (
+          renderVisualExam()
+        ) : (
+          <>
+            {pdfUrl && (
+              <details style={styles.pdfDetails}>
+                <summary style={styles.pdfSummary}>📄 Ver PDF original</summary>
+                <iframe src={pdfUrl} width="100%" height="850" style={styles.iframe} />
+              </details>
+            )}
 
-          {blocks.length === 0 && (
-            <div style={styles.warningBox}>
-              Nenhum bloco digital foi cadastrado para esta prova.
+            <div style={styles.digitalExamBox}>
+              <h2 style={styles.digitalExamTitle}>Prova Digital</h2>
+
+              {blocks.length === 0 && (
+                <div style={styles.warningBox}>
+                  Nenhum bloco digital foi cadastrado para esta prova.
+                </div>
+              )}
+
+              {blocks.map((block) => renderBlock(block))}
             </div>
-          )}
-
-          {blocks.map((block) => renderBlock(block))}
-        </div>
+          </>
+        )}
 
         <button onClick={submitExam} disabled={sending} style={styles.submitButton}>
           {sending ? "Enviando..." : "Enviar Prova"}
@@ -696,5 +882,70 @@ const styles: any = {
     padding: "24px",
     borderRadius: "12px",
     textAlign: "center",
+  },
+
+  visualExamBox: {
+    marginTop: "20px",
+  },
+
+  visualPaper: {
+    position: "relative",
+    width: "100%",
+    minHeight: "880px",
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    borderRadius: "12px",
+    overflow: "hidden",
+  },
+
+  visualPdfFrame: {
+    width: "100%",
+    height: "980px",
+    border: "none",
+    background: "#fff",
+    pointerEvents: "none",
+  },
+
+  visualImage: {
+    width: "100%",
+    display: "block",
+    pointerEvents: "none",
+  },
+
+  visualAnswerField: {
+    position: "absolute",
+    transform: "translate(-50%, -50%)",
+    border: "2px solid #2563eb",
+    background: "rgba(255,255,255,0.45)",
+    color: "#111827",
+    borderRadius: "6px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "bold",
+    fontSize: "20px",
+    cursor: "pointer",
+    outline: "none",
+    zIndex: 5,
+  },
+
+  visualChoiceSelected: {
+    background: "rgba(219, 234, 254, 0.85)",
+    color: "#1d4ed8",
+    border: "3px solid #1d4ed8",
+  },
+
+  visualTextInput: {
+    padding: "4px 6px",
+    fontSize: "15px",
+    textAlign: "center",
+    background: "rgba(255,255,255,0.85)",
+  },
+
+  visualEssayInput: {
+    padding: "6px",
+    fontSize: "14px",
+    resize: "none",
+    background: "rgba(255,255,255,0.9)",
   },
 };
