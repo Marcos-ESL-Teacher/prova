@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
 type ParserMode = "sbs" | "generic";
@@ -88,10 +88,17 @@ export default function ExamsAdminPage() {
   const [visualAutoRunning, setVisualAutoRunning] = useState(false);
   const [visualCurrentPage, setVisualCurrentPage] = useState(1);
   const [visualTotalPages, setVisualTotalPages] = useState(1);
+  const visualPageCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     carregarColecoes();
   }, []);
+
+  useEffect(() => {
+    if (!showVisualEditor || !visualFileUrl || !isVisualPdfFile(visualFileUrl)) return;
+    renderizarPaginaPdfVisual();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showVisualEditor, visualFileUrl, visualCurrentPage]);
 
   async function carregarColecoes() {
     setCarregando(true);
@@ -364,6 +371,47 @@ export default function ExamsAdminPage() {
     }, 100);
   }
 
+  function isVisualPdfFile(fileUrl: string) {
+    const clean = String(fileUrl || "").split("?")[0].toLowerCase();
+    return clean.includes(".pdf") || String(fileUrl || "").toLowerCase().includes("application/pdf");
+  }
+
+  async function renderizarPaginaPdfVisual() {
+    const canvas = visualPageCanvasRef.current;
+    if (!canvas || !visualFileUrl || !isVisualPdfFile(visualFileUrl)) return;
+
+    try {
+      const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/legacy/build/pdf.worker.mjs",
+        import.meta.url
+      ).toString();
+
+      const pdf = await pdfjsLib.getDocument({ url: visualFileUrl }).promise;
+      const pageNumber = Math.min(Math.max(1, Number(visualCurrentPage || 1)), Number(pdf.numPages || 1));
+      const page = await pdf.getPage(pageNumber);
+      const baseViewport = page.getViewport({ scale: 1 });
+
+      const availableWidth = Math.min(900, Math.max(620, window.innerWidth - 520));
+      const scale = availableWidth / baseViewport.width;
+      const viewport = page.getViewport({ scale });
+      const dpr = window.devicePixelRatio || 1;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+
+      canvas.width = Math.floor(viewport.width * dpr);
+      canvas.height = Math.floor(viewport.height * dpr);
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      context.clearRect(0, 0, viewport.width, viewport.height);
+      await page.render({ canvasContext: context, viewport }).promise;
+    } catch (error: any) {
+      setVisualStatus("Não consegui renderizar esta página do PDF. Se possível, envie o PDF novamente ou tente usar imagem PNG/JPG.");
+      console.log("Erro ao renderizar PDF visual:", error);
+    }
+  }
+
   async function carregarArquivoVisual(pdfValue: string) {
     if (!pdfValue) {
       setVisualFileUrl("");
@@ -493,7 +541,7 @@ export default function ExamsAdminPage() {
     setProvaSelecionada(provaAtualizada);
     setProvas((prev) => prev.map((p) => (p.id === provaSelecionada.id ? provaAtualizada : p)));
     await carregarArquivoVisual(storagePath);
-    setVisualStatus("Arquivo salvo. Agora clique sobre a prova para criar os campos de resposta.");
+    setVisualStatus("Arquivo salvo. Agora crie a lista de respostas numeradas abaixo.");
   }
 
   function adicionarCampoVisualPorClique(event: any) {
@@ -502,12 +550,17 @@ export default function ExamsAdminPage() {
     const rect = event.currentTarget.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * 100;
     const y = ((event.clientY - rect.top) / rect.height) * 100;
+    const currentQuestionNumber = Number(visualQuestionNumber || 1);
+    const currentAnswerValue = visualAnswerValue.trim().toUpperCase() || "A";
 
     const field: VisualFieldDraft = {
       page_number: Number(visualCurrentPage || 1),
-      question_number: Number(visualQuestionNumber || 1),
+      question_number: currentQuestionNumber,
       field_type: visualFieldType,
-      answer_value: visualFieldType === "choice" ? visualAnswerValue.trim().toUpperCase() || "A" : `q${visualQuestionNumber}`,
+      answer_value:
+        visualFieldType === "choice"
+          ? currentAnswerValue
+          : `q${currentQuestionNumber}`,
       x: Number(x.toFixed(3)),
       y: Number(y.toFixed(3)),
       width: Number(visualFieldWidth || 8),
@@ -517,14 +570,10 @@ export default function ExamsAdminPage() {
 
     setVisualFields((prev) => [...prev, field]);
 
-    if (visualFieldType === "choice") {
-      const next = String.fromCharCode((visualAnswerValue.trim().toUpperCase() || "A").charCodeAt(0) + 1);
-      if (["A", "B", "C", "D", "E"].includes(next)) {
-        setVisualAnswerValue(next);
-      }
-    } else {
-      setVisualQuestionNumber((prev) => Number(prev || 1) + 1);
-    }
+    // V3 + avanço automático:
+    // após criar um campo, o número da questão sobe sozinho: Q1 -> Q2 -> Q3.
+    // A alternativa escolhida permanece igual para você mudar apenas quando precisar.
+    setVisualQuestionNumber(currentQuestionNumber + 1);
   }
 
   function removerCampoVisual(index: number) {
@@ -823,7 +872,7 @@ export default function ExamsAdminPage() {
       return;
     }
 
-    setVisualStatus("Prova Visual Interativa salva com sucesso.");
+    setVisualStatus("Prova Visual Estável salva com sucesso.");
     await carregarCamposVisuais(provaSelecionada.id);
   }
 
@@ -2344,7 +2393,7 @@ ${link}`);
                     onClick={() => selecionarProvaVisualInterativa(p)}
                     style={styles.visualButton}
                   >
-                    🖼️ Prova Visual Interativa
+                    🖼️ Prova Visual Estável
                   </button>
 
                   {(p.visual_enabled || p.exam_mode === "visual") && (
@@ -2390,7 +2439,7 @@ ${link}`);
         <section id="editor-visual-interativo" style={styles.importerCard}>
           <div style={styles.importerHeader}>
             <div>
-              <h2 style={styles.cardTitle}>🖼️ Prova Visual Interativa</h2>
+              <h2 style={styles.cardTitle}>🖼️ Prova Visual Estável</h2>
               <p style={styles.subtitle}>
                 Prova: <strong>{provaSelecionada.title}</strong>
               </p>
@@ -2404,12 +2453,12 @@ ${link}`);
               }}
               style={styles.closeButton}
             >
-              Fechar Editor Visual
+              Fechar Prova Visual
             </button>
           </div>
 
           <div style={styles.visualHelpBox}>
-            <strong>Como usar:</strong> envie o PDF ou imagem da prova, depois clique exatamente em cima das alternativas ou lacunas. Cada clique cria um campo interativo para o aluno responder em cima da própria prova.
+            <strong>V4.1 ESTÁVEL SEM OVERLAY:</strong> o aluno verá o PDF/imagem original em cima e responderá em campos numerados embaixo. Não existem caixas por cima do PDF, então nada fica fora do lugar ou flutuando.
           </div>
 
           <div style={styles.uploadBox}>
@@ -2427,127 +2476,7 @@ ${link}`);
             />
           </div>
 
-          <div style={styles.visualControls}>
-            <div>
-              <label style={styles.smallLabel}>Nº da questão</label>
-              <input
-                type="number"
-                min="1"
-                value={visualQuestionNumber}
-                onChange={(e) => setVisualQuestionNumber(Number(e.target.value || 1))}
-                style={styles.input}
-              />
-            </div>
-
-            <div>
-              <label style={styles.smallLabel}>Tipo</label>
-              <select
-                value={visualFieldType}
-                onChange={(e) => {
-                  const nextType = e.target.value as "choice" | "text" | "essay";
-                  setVisualFieldType(nextType);
-                  if (nextType === "choice") {
-                    setVisualFieldWidth(8);
-                    setVisualFieldHeight(4);
-                  } else if (nextType === "text") {
-                    setVisualFieldWidth(42);
-                    setVisualFieldHeight(3.2);
-                  } else {
-                    setVisualFieldWidth(70);
-                    setVisualFieldHeight(10);
-                  }
-                }}
-                style={styles.input}
-              >
-                <option value="choice">Alternativa / X</option>
-                <option value="text">Lacuna / texto curto</option>
-                <option value="essay">Resposta longa</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={styles.smallLabel}>Valor da alternativa</label>
-              <input
-                value={visualAnswerValue}
-                onChange={(e) => setVisualAnswerValue(e.target.value)}
-                style={styles.input}
-                placeholder="A, B, C, D..."
-                disabled={visualFieldType !== "choice"}
-              />
-            </div>
-
-            <div>
-              <label style={styles.smallLabel}>Resposta correta</label>
-              <input
-                value={visualCorrectAnswer}
-                onChange={(e) => setVisualCorrectAnswer(e.target.value)}
-                style={styles.input}
-                placeholder="Ex: B ou resposta da lacuna"
-              />
-            </div>
-
-            <div>
-              <label style={styles.smallLabel}>Largura %</label>
-              <input
-                type="number"
-                value={visualFieldWidth}
-                onChange={(e) => setVisualFieldWidth(Number(e.target.value || 8))}
-                style={styles.input}
-              />
-            </div>
-
-            <div>
-              <label style={styles.smallLabel}>Altura %</label>
-              <input
-                type="number"
-                value={visualFieldHeight}
-                onChange={(e) => setVisualFieldHeight(Number(e.target.value || 4))}
-                style={styles.input}
-              />
-            </div>
-          </div>
-
           {visualStatus && <div style={styles.statusBox}>{visualStatus}</div>}
-
-          {visualFileUrl && (
-            <div style={styles.importButtons}>
-              <button
-                type="button"
-                onClick={autoCriarCamposDaProva}
-                disabled={visualAutoRunning || visualSaving}
-                style={styles.aiButton}
-              >
-                {visualAutoRunning ? "Analisando..." : "🤖 Auto Criar Campos da Prova"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const total = Math.max(1, Number(visualTotalPages || 1));
-                  const existing = visualFields.filter((field) => Number(field.question_number || 0) < 9000);
-                  const doubts: VisualFieldDraft[] = [];
-                  for (let pageNumber = 1; pageNumber <= total; pageNumber++) {
-                    doubts.push({
-                      page_number: pageNumber,
-                      question_number: 9000 + pageNumber,
-                      field_type: "essay",
-                      answer_value: `doubt_p${pageNumber}`,
-                      x: 50,
-                      y: 94,
-                      width: 78,
-                      height: 7,
-                      correct_answer: "",
-                    });
-                  }
-                  setVisualFields([...existing, ...doubts]);
-                  setVisualStatus("Campo de dúvida em inglês adicionado em todas as páginas.");
-                }}
-                disabled={visualSaving}
-                style={styles.secondaryButton}
-              >
-                💬 Dúvida em inglês em todas as páginas
-              </button>
-            </div>
-          )}
 
           {visualFileUrl ? (
             <>
@@ -2575,74 +2504,138 @@ ${link}`);
                 </button>
               </div>
 
-              <div style={styles.visualWorkspace}>
-                <div style={styles.visualCanvas}>
-                  <div
-                    style={styles.visualPdfSurface}
-                    onClick={adicionarCampoVisualPorClique}
-                    title="Clique para criar um campo de resposta"
-                  >
-                    {visualFileUrl.toLowerCase().includes(".pdf") ? (
-                      <iframe
-                        key={`visual-pdf-${visualCurrentPage}`}
-                        src={`${visualFileUrl}#page=${visualCurrentPage}&zoom=page-width`}
-                        style={styles.visualPdfFrame}
-                      />
-                    ) : (
-                      <img src={visualFileUrl} alt="Prova visual" style={styles.visualImage} />
-                    )}
-
-                    {visualFields.filter((field) => Number(field.page_number || 1) === Number(visualCurrentPage)).map((field, index) => (
-                      <div
-                        key={`${field.question_number}-${field.answer_value}-${index}`}
-                        style={{
-                          ...styles.visualOverlayField,
-                          left: `${field.x}%`,
-                          top: `${field.y}%`,
-                          width: `${field.width}%`,
-                          height: `${field.height}%`,
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {field.field_type === "choice" ? "X" : `Q${field.question_number}`}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              <div style={styles.visualFieldList}>
-                <h3>Campos criados ({visualFields.length})</h3>
-                {visualFields.length === 0 && (
-                  <p style={styles.empty}>Clique sobre a prova para criar o primeiro campo.</p>
+              <div style={styles.visualPreviewStable}>
+                {isVisualPdfFile(visualFileUrl) ? (
+                  <canvas ref={visualPageCanvasRef} style={styles.visualPdfCanvas} />
+                ) : (
+                  <img src={visualFileUrl} alt="Prova visual" style={styles.visualImage} />
                 )}
-
-                {visualFields.map((field, index) => (
-                  <div key={index} style={styles.visualFieldItem}>
-                    <strong>
-                      Q{field.question_number} — {field.field_type}
-                      {field.answer_value ? ` — ${field.answer_value}` : ""}
-                    </strong>
-                    <small>
-                      pág. {field.page_number || 1} — x {field.x.toFixed(1)}%, y {field.y.toFixed(1)}%, w {field.width}%, h {field.height}%
-                    </small>
-                    {field.correct_answer && <small>Correta: {field.correct_answer}</small>}
-                    <button onClick={() => removerCampoVisual(index)} style={styles.smallRedButton}>
-                      Remover
-                    </button>
-                  </div>
-                ))}
               </div>
-            </div>
             </>
           ) : (
             <div style={styles.warningBox}>
-              Envie o PDF ou imagem da prova para começar a marcar os campos.
+              Envie o PDF ou imagem da prova para começar.
             </div>
           )}
 
+          <div style={styles.visualHelpBox}>
+            <strong>2) Criar respostas numeradas</strong>
+            <p style={{ margin: "8px 0 0" }}>
+              Use “Alternativa / X” para questões A/B/C/D/E. Use “Lacuna / texto curto” para respostas digitadas.
+              O número da questão avança sozinho depois de adicionar.
+            </p>
+          </div>
+
+          <div style={styles.visualControls}>
+            <div>
+              <label style={styles.smallLabel}>Nº da questão</label>
+              <input
+                type="number"
+                min="1"
+                value={visualQuestionNumber}
+                onChange={(e) => setVisualQuestionNumber(Number(e.target.value || 1))}
+                style={styles.input}
+              />
+            </div>
+
+            <div>
+              <label style={styles.smallLabel}>Tipo</label>
+              <select
+                value={visualFieldType}
+                onChange={(e) => setVisualFieldType(e.target.value as "choice" | "text" | "essay")}
+                style={styles.input}
+              >
+                <option value="choice">Alternativa / X</option>
+                <option value="text">Lacuna / texto curto</option>
+                <option value="essay">Resposta longa</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={styles.smallLabel}>Alternativa</label>
+              <select
+                value={visualAnswerValue}
+                onChange={(e) => setVisualAnswerValue(e.target.value)}
+                style={styles.input}
+                disabled={visualFieldType !== "choice"}
+              >
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+                <option value="D">D</option>
+                <option value="E">E</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={styles.smallLabel}>Resposta correta</label>
+              <input
+                value={visualCorrectAnswer}
+                onChange={(e) => setVisualCorrectAnswer(e.target.value)}
+                style={styles.input}
+                placeholder="Ex: B ou resposta da lacuna"
+              />
+            </div>
+
+            <button
+              type="button"
+              style={styles.saveButton}
+              onClick={() => {
+                const currentQuestionNumber = Number(visualQuestionNumber || 1);
+                const newField: VisualFieldDraft = {
+                  page_number: 1,
+                  question_number: currentQuestionNumber,
+                  field_type: visualFieldType,
+                  answer_value: visualFieldType === "choice" ? visualAnswerValue : `q${currentQuestionNumber}`,
+                  x: 0,
+                  y: 0,
+                  width: 0,
+                  height: 0,
+                  correct_answer: visualCorrectAnswer.trim(),
+                };
+
+                setVisualFields((prev) => [...prev, newField]);
+
+                if (visualFieldType === "choice") {
+                  const letters = ["A", "B", "C", "D", "E"];
+                  const currentIndex = letters.indexOf(String(visualAnswerValue || "A"));
+                  if (currentIndex >= 0 && currentIndex < letters.length - 1) {
+                    setVisualAnswerValue(letters[currentIndex + 1]);
+                  } else {
+                    setVisualAnswerValue("A");
+                    setVisualQuestionNumber(currentQuestionNumber + 1);
+                  }
+                } else {
+                  setVisualQuestionNumber(currentQuestionNumber + 1);
+                }
+              }}
+            >
+              ➕ Adicionar resposta
+            </button>
+          </div>
+
+          <div style={styles.visualFieldListStable}>
+            <h3>Respostas criadas ({visualFields.length})</h3>
+            {visualFields.length === 0 && (
+              <p style={styles.empty}>Adicione Q1, Q2, Q3... para o aluno responder embaixo da prova.</p>
+            )}
+
+            {visualFields.map((field, index) => (
+              <div key={index} style={styles.visualFieldItem}>
+                <strong>
+                  Q{field.question_number} — {field.field_type === "choice" ? `Alternativa ${field.answer_value}` : field.field_type === "essay" ? "Resposta longa" : "Texto curto"}
+                </strong>
+                {field.correct_answer && <small>Correta: {field.correct_answer}</small>}
+                <button onClick={() => removerCampoVisual(index)} style={styles.smallRedButton}>
+                  Remover
+                </button>
+              </div>
+            ))}
+          </div>
+
           <div style={styles.importButtons}>
             <button onClick={salvarCamposVisuais} disabled={visualSaving} style={styles.saveButton}>
-              {visualSaving ? "Salvando..." : "💾 Salvar Prova Visual Interativa"}
+              {visualSaving ? "Salvando..." : "💾 Salvar Prova Visual Estável"}
             </button>
 
             <button
@@ -2652,7 +2645,7 @@ ${link}`);
               }}
               style={styles.secondaryButton}
             >
-              Limpar campos
+              Limpar respostas
             </button>
           </div>
         </section>
@@ -3518,31 +3511,35 @@ const styles: any = {
     width: "100%",
     height: "80vh",
     maxHeight: "80vh",
-    background: "#e5e7eb",
+    background: "#111827",
     border: "2px dashed #fb923c",
     borderRadius: "12px",
     overflowY: "auto",
     overflowX: "auto",
     overscrollBehavior: "contain",
+    padding: "16px",
   },
 
   visualPdfSurface: {
     position: "relative",
-    width: "100%",
-    minHeight: "1200px",
+    width: "fit-content",
+    minWidth: "320px",
+    minHeight: "320px",
+    margin: "0 auto",
+    background: "#fff",
     cursor: "crosshair",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.25)",
   },
 
-  visualPdfFrame: {
-    width: "100%",
-    height: "1200px",
-    border: "none",
+  visualPdfCanvas: {
+    display: "block",
     background: "#fff",
     pointerEvents: "none",
   },
 
   visualImage: {
-    width: "100%",
+    maxWidth: "900px",
+    width: "auto",
     display: "block",
     pointerEvents: "none",
   },
@@ -3561,6 +3558,23 @@ const styles: any = {
     fontSize: "18px",
   },
 
+
+  visualPreviewStable: {
+    display: "flex",
+    justifyContent: "center",
+    background: "#f8fafc",
+    border: "1px solid #dbe3ef",
+    borderRadius: "12px",
+    padding: "14px",
+    marginBottom: "18px",
+    overflowX: "auto",
+  },
+
+  visualFieldListStable: {
+    marginTop: "18px",
+    display: "grid",
+    gap: "10px",
+  },
   visualFieldList: {
     background: "#f8fafc",
     border: "1px solid #e2e8f0",
