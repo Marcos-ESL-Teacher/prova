@@ -82,7 +82,13 @@ export default function ExamsAdminPage() {
   const [visualFileUrl, setVisualFileUrl] = useState("");
   const [visualFields, setVisualFields] = useState<VisualFieldDraft[]>([]);
   const [visualQuestionNumber, setVisualQuestionNumber] = useState(1);
-  const [visualFieldType, setVisualFieldType] = useState<"choice" | "text" | "essay">("choice");
+const [visualFieldType, setVisualFieldType] =
+  useState<
+    "choice" |
+    "fill_blank" |
+    "circle_option" |
+    "essay"
+  >("choice");
   const [visualAnswerValue, setVisualAnswerValue] = useState("A");
   const [visualCorrectAnswer, setVisualCorrectAnswer] = useState("");
   const [visualFieldWidth, setVisualFieldWidth] = useState(8);
@@ -707,7 +713,7 @@ export default function ExamsAdminPage() {
       fields.push({
         page_number: pageNumber,
         question_number: questionNumber,
-        field_type: "text",
+        "fill_blank"
         answer_value: `q${questionNumber}`,
         x: Number(xPct.toFixed(3)),
         y: Number(yPct.toFixed(3)),
