@@ -617,6 +617,19 @@ export default function StudentExamBlocksPage() {
             </div>
 
             <div style={styles.visualPaperStable}>
+              <div
+  style={{
+    position: "absolute",
+    left: "40%",
+    top: "40%",
+    width: "150px",
+    zIndex: 9999,
+    background: "yellow",
+    border: "2px solid red"
+  }}
+>
+  TESTE V5
+</div>
               {isPdfFile(pdfUrl) ? (
                 <canvas ref={visualPageCanvasRef} style={styles.visualPdfCanvasStable} />
               ) : (

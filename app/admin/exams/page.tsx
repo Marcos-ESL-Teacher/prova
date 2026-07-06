@@ -37,7 +37,11 @@ type VisualFieldDraft = {
   id?: string;
   page_number: number;
   question_number: number;
-  field_type: "choice" | "text" | "essay";
+  field_type:
+"choice" |
+"fill_blank" |
+"circle_option" |
+"essay"
   answer_value: string;
   x: number;
   y: number;
