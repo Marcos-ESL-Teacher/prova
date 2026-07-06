@@ -722,12 +722,6 @@ fields.push({
   height: 3.2,
   correct_answer: normalizarRespostaCorretaAutomatica(questionNumber),
 });
-        x: Number(xPct.toFixed(3)),
-        y: Number(yPct.toFixed(3)),
-        width: Number(Math.min(78, Math.max(24, lineWidthPct)).toFixed(2)),
-        height: 3.2,
-        correct_answer: normalizarRespostaCorretaAutomatica(questionNumber),
-      });
     }
 
     return fields;
@@ -2544,30 +2538,39 @@ ${link}`);
           </div>
 
           <div style={styles.visualControls}>
-            <div>
-              <label style={styles.smallLabel}>Nº da questão</label>
-              <input
-                type="number"
-                min="1"
-                value={visualQuestionNumber}
-                onChange={(e) => setVisualQuestionNumber(Number(e.target.value || 1))}
-                style={styles.input}
-              />
-            </div>
+<div>
+  <label style={styles.smallLabel}>Nº da questão</label>
+  <input
+    type="number"
+    min="1"
+    value={visualQuestionNumber}
+    onChange={(e) => setVisualQuestionNumber(Number(e.target.value || 1))}
+    style={styles.input}
+  />
+</div>
 
-            <div>
-              <label style={styles.smallLabel}>Tipo</label>
-              <select
-                value={visualFieldType}
-                onChange={(e) => setVisualFieldType(e.target.value as "choice" | "text" | "essay")}
-                style={styles.input}
-              >
-                <option value="choice">Alternativa / X</option>
-                <option value="text">Lacuna / texto curto</option>
-                <option value="essay">Resposta longa</option>
-              </select>
-            </div>
+<div>
+  <label style={styles.smallLabel}>Tipo</label>
 
+  <select
+    value={visualFieldType}
+    onChange={(e) =>
+      setVisualFieldType(
+        e.target.value as
+          | "choice"
+          | "fill_blank"
+          | "circle_option"
+          | "essay"
+      )
+    }
+    style={styles.input}
+  >
+    <option value="choice">Alternativa / X</option>
+    <option value="fill_blank">Lacuna / texto curto</option>
+    <option value="circle_option">Circular opção</option>
+    <option value="essay">Resposta longa</option>
+  </select>
+</div>
             <div>
               <label style={styles.smallLabel}>Alternativa</label>
               <select
