@@ -709,9 +709,9 @@ const [visualFieldType, setVisualFieldType] =
       const tooClose = fields.some((field) => Math.abs(field.y - yPct) < 2.0 && Math.abs(field.x - xPct) < 8);
       if (tooClose) continue;
 
-      const questionNumber = nextQuestion++;
-      fields.push({
-        fields.push({
+const questionNumber = nextQuestion++;
+
+fields.push({
   page_number: pageNumber,
   question_number: questionNumber,
   field_type: "fill_blank",
