@@ -711,10 +711,17 @@ const [visualFieldType, setVisualFieldType] =
 
       const questionNumber = nextQuestion++;
       fields.push({
-        page_number: pageNumber,
-        question_number: questionNumber,
-        "fill_blank"
-        answer_value: `q${questionNumber}`,
+        fields.push({
+  page_number: pageNumber,
+  question_number: questionNumber,
+  field_type: "fill_blank",
+  answer_value: `q${questionNumber}`,
+  x: Number(xPct.toFixed(3)),
+  y: Number(yPct.toFixed(3)),
+  width: Number(Math.min(78, Math.max(24, lineWidthPct)).toFixed(2)),
+  height: 3.2,
+  correct_answer: normalizarRespostaCorretaAutomatica(questionNumber),
+});
         x: Number(xPct.toFixed(3)),
         y: Number(yPct.toFixed(3)),
         width: Number(Math.min(78, Math.max(24, lineWidthPct)).toFixed(2)),
