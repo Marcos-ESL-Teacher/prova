@@ -33,19 +33,15 @@ export default function VisualExamEditorV5() {
         cursor: "crosshair",
       }}
     >
-      <div
+      <img
+        src="https://picsum.photos/900/1200"
+        alt="Página de teste"
         style={{
           width: "900px",
-          height: "1200px",
-          background: "#ffffff",
+          display: "block",
           border: "1px solid #ccc",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
         }}
-      >
-        Clique aqui para criar campos
-      </div>
+      />
 
       {fields.map((field, index) => (
         <div
