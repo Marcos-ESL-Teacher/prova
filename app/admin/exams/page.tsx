@@ -2515,13 +2515,42 @@ ${link}`);
                 </button>
               </div>
 
-              <div style={styles.visualPreviewStable}>
-                {isVisualPdfFile(visualFileUrl) ? (
-                  <canvas ref={visualPageCanvasRef} style={styles.visualPdfCanvas} />
-                ) : (
-                  <img src={visualFileUrl} alt="Prova visual" style={styles.visualImage} />
-                )}
-              </div>
+<div style={styles.visualPreviewStable}>
+  <div
+    style={styles.visualPdfSurface}
+    onClick={adicionarCampoVisualPorClique}
+  >
+    {isVisualPdfFile(visualFileUrl) ? (
+      <canvas
+        ref={visualPageCanvasRef}
+        style={styles.visualPdfCanvas}
+      />
+
+) : (
+  <img
+    src={visualFileUrl}
+    alt="Prova
+    {visualFields
+      .filter(
+        (field) =>
+          Number(field.page_number) === Number(visualCurrentPage)
+      )
+      .map((field, index) => (
+        <div
+          key={index}
+          style={{
+            ...styles.visualOverlayField,
+            left: `${field.x}%`,
+            top: `${field.y}%`,
+            width: `${field.width}%`,
+            height: `${field.height}%`,
+          }}
+        >
+          Q{field.question_number}
+        </div>
+      ))}
+  </div>
+</div>
             </>
           ) : (
             <div style={styles.warningBox}>
@@ -2529,15 +2558,16 @@ ${link}`);
             </div>
           )}
 
-          <div style={styles.visualHelpBox}>
-            <strong>2) Criar respostas numeradas</strong>
-            <p style={{ margin: "8px 0 0" }}>
-              Use “Alternativa / X” para questões A/B/C/D/E. Use “Lacuna / texto curto” para respostas digitadas.
-              O número da questão avança sozinho depois de adicionar.
-            </p>
-          </div>
+<div style={styles.visualHelpBox}>
+  <strong>2) Criar respostas numeradas</strong>
+  <p style={{ margin: "8px 0 0" }}>
+    Use “Alternativa / X” para questões A/B/C/D/E.
+    Use “Lacuna / texto curto” para respostas digitadas.
+    O número da questão avança sozinho depois de adicionar.
+  </p>
+</div>
 
-          <div style={styles.visualControls}>
+<div style={styles.visualControls}>
 <div>
   <label style={styles.smallLabel}>Nº da questão</label>
   <input

@@ -507,7 +507,78 @@ export default function StudentExamBlocksPage() {
 
     return Object.entries(grouped).sort((a, b) => Number(a[0]) - Number(b[0]));
   }
+function renderVisualFieldV5(field: VisualField) {
+  const questionKey = `visual_q_${field.question_number}`;
 
+  if (field.field_type === "choice") {
+    const selected =
+      answers[questionKey] === String(field.answer_value || "");
+
+    return (
+      <button
+        key={field.id}
+        type="button"
+        onClick={() =>
+          updateAnswer(
+            questionKey,
+            String(field.answer_value || "")
+          )
+        }
+        style={{
+          ...styles.visualAnswerField,
+          ...(selected ? styles.visualChoiceSelected : {}),
+          left: `${field.x}%`,
+          top: `${field.y}%`,
+          width: `${field.width}%`,
+          height: `${field.height}%`,
+          pointerEvents: "auto",
+        }}
+      >
+        {field.answer_value}
+      </button>
+    );
+  }
+
+  if (field.field_type === "essay") {
+    return (
+      <textarea
+        key={field.id}
+        value={answers[questionKey] || ""}
+        onChange={(e) =>
+          updateAnswer(questionKey, e.target.value)
+        }
+        style={{
+          ...styles.visualAnswerField,
+          ...styles.visualEssayInput,
+          left: `${field.x}%`,
+          top: `${field.y}%`,
+          width: `${field.width}%`,
+          height: `${field.height}%`,
+          pointerEvents: "auto",
+        }}
+      />
+    );
+  }
+
+  return (
+    <input
+      key={field.id}
+      value={answers[questionKey] || ""}
+      onChange={(e) =>
+        updateAnswer(questionKey, e.target.value)
+      }
+      style={{
+        ...styles.visualAnswerField,
+        ...styles.visualTextInput,
+        left: `${field.x}%`,
+        top: `${field.y}%`,
+        width: `${field.width}%`,
+        height: `${field.height}%`,
+        pointerEvents: "auto",
+      }}
+    />
+  );
+}
   function renderStableVisualQuestion(questionNumber: string, fields: VisualField[]) {
     const firstField = fields[0];
     const questionKey = `visual_q_${questionNumber}`;
@@ -616,13 +687,32 @@ export default function StudentExamBlocksPage() {
               </button>
             </div>
 
-            <div style={styles.visualPaperStable}>
-              {isPdfFile(pdfUrl) ? (
-                <canvas ref={visualPageCanvasRef} style={styles.visualPdfCanvasStable} />
-              ) : (
-                <img src={pdfUrl} alt="Prova" style={styles.visualImageStable} />
-              )}
-            </div>
+<div style={styles.visualPaperStable}>
+  <div style={styles.visualPdfSurface}>
+    {isPdfFile(pdfUrl) ? (
+      <canvas
+        ref={visualPageCanvasRef}
+        style={styles.visualPdfCanvas}
+      />
+ 
+) : (
+  <img
+    src={pdfUrl}
+    alt="Prova"
+    style={styles.visualImage}
+/>
+    )}
+
+    <div style={styles.visualFieldsLayer}>
+      {visualFields
+        .filter(
+          (field) =>
+            Number(field.page_number) === Number(visualCurrentPage)
+        )
+        .map((field) => renderVisualFieldV5(field))}
+    </div>
+  </div>
+</div>
           </>
         )}
 
