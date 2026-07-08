@@ -2401,11 +2401,13 @@ ${link}`);
                   </button>
 
                   <button
-                    onClick={() => selecionarProvaVisualInterativa(p)}
-                    style={styles.visualButton}
-                  >
-                    🖼️ Prova Visual Estável
-                  </button>
+  onClick={() => {
+    window.location.href = `/admin/visual-v5/${p.id}`;
+  }}
+  style={styles.visualButton}
+>
+  🖼️ Editor Visual VEE
+</button>
 
                   {(p.visual_enabled || p.exam_mode === "visual") && (
                     <button
@@ -2515,42 +2517,45 @@ ${link}`);
                 </button>
               </div>
 
-<div style={styles.visualPreviewStable}>
-  <div
-    style={styles.visualPdfSurface}
-    onClick={adicionarCampoVisualPorClique}
-  >
-    {isVisualPdfFile(visualFileUrl) ? (
-      <canvas
-        ref={visualPageCanvasRef}
-        style={styles.visualPdfCanvas}
-      />
+              <div style={styles.visualPreviewStable}>
+                <div
+                  style={styles.visualPdfSurface}
+                  onClick={adicionarCampoVisualPorClique}
+                >
+                  {isVisualPdfFile(visualFileUrl) ? (
+                    <canvas
+                      ref={visualPageCanvasRef}
+                      style={styles.visualPdfCanvas}
+                    />
+                  ) : (
+                    <img
+                      src={visualFileUrl}
+                      alt="Prova visual"
+                      style={styles.visualImage}
+                    />
+                  )}
 
-) : (
-  <img
-    src={visualFileUrl}
-    alt="Prova
-    {visualFields
-      .filter(
-        (field) =>
-          Number(field.page_number) === Number(visualCurrentPage)
-      )
-      .map((field, index) => (
-        <div
-          key={index}
-          style={{
-            ...styles.visualOverlayField,
-            left: `${field.x}%`,
-            top: `${field.y}%`,
-            width: `${field.width}%`,
-            height: `${field.height}%`,
-          }}
-        >
-          Q{field.question_number}
-        </div>
-      ))}
-  </div>
-</div>
+                  {visualFields
+                    .filter(
+                      (field) =>
+                        Number(field.page_number) === Number(visualCurrentPage)
+                    )
+                    .map((field, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          ...styles.visualOverlayField,
+                          left: `${field.x}%`,
+                          top: `${field.y}%`,
+                          width: `${field.width}%`,
+                          height: `${field.height}%`,
+                        }}
+                      >
+                        Q{field.question_number}
+                      </div>
+                    ))}
+                </div>
+              </div>
             </>
           ) : (
             <div style={styles.warningBox}>
