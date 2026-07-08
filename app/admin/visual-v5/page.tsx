@@ -6,10 +6,10 @@ import NewProjectDialog from "../../../components/vee/NewProjectDialog";
 
 type Project = {
   id: string;
-  name: string;
+  collection: string;
   book: string;
   chapter: string;
-  description: string;
+  name: string;
   fileName: string;
 };
 
@@ -55,7 +55,9 @@ export default function VisualV5Page() {
             {projects.map((project) => (
               <div key={project.id} style={styles.projectCard}>
                 <strong>{project.name}</strong>
-                <p>{project.book} {project.chapter}</p>
+                <p>
+                  {project.collection} — {project.book} {project.chapter}
+                </p>
                 <small>{project.fileName || "PDF ainda não selecionado"}</small>
               </div>
             ))}
