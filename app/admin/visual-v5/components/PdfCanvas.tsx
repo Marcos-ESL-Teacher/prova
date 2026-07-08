@@ -23,6 +23,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
   const [pageNumber, setPageNumber] = useState(1);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [fields, setFields] = useState<FieldBoxData[]>([]);
+  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
@@ -52,6 +53,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
         );
 
         setFields(mappedFields);
+        setSelectedFieldId(null);
         setStatusMessage(
           mappedFields.length > 0
             ? `Campos carregados: ${mappedFields.length}`
@@ -83,6 +85,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
         setPdf(loadedPdf);
         setNumPages(loadedPdf.numPages || 1);
         setPageNumber(1);
+        setSelectedFieldId(null);
       } catch (error: any) {
         setErrorMessage(error?.message || "Erro ao carregar PDF.");
       } finally {
@@ -177,7 +180,64 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
     };
 
     setFields((prev) => [...prev, newField]);
+    setSelectedFieldId(newField.id);
     setStatusMessage(`Campo Q${nextQuestionNumber} criado. Clique em Salvar.`);
+  }
+
+  function handleSelectField(fieldId: string) {
+    setSelectedFieldId(fieldId);
+
+    const selected = fields.find((field) => field.id === fieldId);
+
+    if (selected) {
+      setStatusMessage(`Campo Q${selected.questionNumber} selecionado.`);
+    }
+  }
+
+  function deleteSelectedField() {
+    if (!selectedFieldId) return;
+
+    const selected = fields.find((field) => field.id === selectedFieldId);
+
+    const confirmDelete = confirm(
+      selected
+        ? `Deseja excluir o campo Q${selected.questionNumber}? Depois clique em Salvar.`
+        : "Deseja excluir o campo selecionado? Depois clique em Salvar."
+    );
+
+    if (!confirmDelete) return;
+
+    setFields((prev) => prev.filter((field) => field.id !== selectedFieldId));
+    setSelectedFieldId(null);
+    setStatusMessage("Campo selecionado removido da tela. Clique em Salvar.");
+  }
+
+  function duplicateSelectedField() {
+    if (!selectedFieldId) return;
+
+    const selected = fields.find((field) => field.id === selectedFieldId);
+
+    if (!selected) return;
+
+    const nextQuestionNumber =
+      fields.length > 0
+        ? Math.max(...fields.map((field) => field.questionNumber)) + 1
+        : 1;
+
+    const duplicatedField: FieldBoxData = {
+      ...selected,
+      id: String(Date.now()),
+      dbId: undefined,
+      questionNumber: nextQuestionNumber,
+      xPercent: Math.min(98, Number((selected.xPercent + 2).toFixed(3))),
+      yPercent: Math.min(98, Number((selected.yPercent + 2).toFixed(3))),
+    };
+
+    setFields((prev) => [...prev, duplicatedField]);
+    setSelectedFieldId(duplicatedField.id);
+    setStatusMessage(
+      `Campo duplicado como Q${nextQuestionNumber}. Clique em Salvar.`
+    );
   }
 
   async function handleSaveFields() {
@@ -228,6 +288,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
       );
 
       setFields(mappedFields);
+      setSelectedFieldId(null);
       setStatusMessage(`Campos salvos com sucesso: ${mappedFields.length}`);
     } catch (error: any) {
       setErrorMessage(error?.message || "Erro ao salvar campos.");
@@ -239,6 +300,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
 
   function removeLastField() {
     setFields((prev) => prev.slice(0, -1));
+    setSelectedFieldId(null);
     setStatusMessage("Último campo removido da tela. Clique em Salvar.");
   }
 
@@ -250,18 +312,22 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
     if (!confirmClear) return;
 
     setFields([]);
+    setSelectedFieldId(null);
     setStatusMessage("Campos removidos da tela. Clique em Salvar.");
   }
 
   function goPrevious() {
     setPageNumber((current) => Math.max(1, current - 1));
+    setSelectedFieldId(null);
   }
 
   function goNext() {
     setPageNumber((current) => Math.min(numPages, current + 1));
+    setSelectedFieldId(null);
   }
 
   const visibleFields = fields.filter((field) => field.page === pageNumber);
+  const selectedField = fields.find((field) => field.id === selectedFieldId);
 
   return (
     <div style={styles.container} ref={containerRef}>
@@ -306,13 +372,35 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
         </button>
 
         <button
+          style={styles.secondaryButton}
+          onClick={duplicateSelectedField}
+          disabled={!selectedFieldId || saving}
+        >
+          📋 Duplicar selecionado
+        </button>
+
+        <button
+          style={styles.dangerButton}
+          onClick={deleteSelectedField}
+          disabled={!selectedFieldId || saving}
+        >
+          🗑️ Excluir selecionado
+        </button>
+
+        <button
           style={styles.dangerButton}
           onClick={clearFields}
           disabled={fields.length === 0 || saving}
         >
-          🗑️ Limpar tudo
+          🧹 Limpar tudo
         </button>
       </div>
+
+      {selectedField && (
+        <div style={styles.selectedInfo}>
+          Campo selecionado: <strong>Q{selectedField.questionNumber}</strong>
+        </div>
+      )}
 
       {loading && <p>Carregando página...</p>}
 
@@ -335,7 +423,11 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
         >
           <canvas ref={canvasRef} style={styles.canvas} />
 
-          <FieldLayer fields={visibleFields} />
+          <FieldLayer
+            fields={visibleFields}
+            selectedFieldId={selectedFieldId}
+            onSelectField={handleSelectField}
+          />
         </div>
       </div>
 
@@ -402,6 +494,14 @@ const styles: Record<string, CSSProperties> = {
     padding: "10px 12px",
     fontWeight: 800,
     cursor: "pointer",
+  },
+  selectedInfo: {
+    marginBottom: "12px",
+    padding: "10px 12px",
+    background: "#eff6ff",
+    border: "1px solid #93c5fd",
+    borderRadius: "10px",
+    color: "#1e40af",
   },
   stage: {
     width: "100%",

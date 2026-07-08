@@ -17,13 +17,24 @@ export type FieldBoxData = {
 
 type FieldLayerProps = {
   fields: FieldBoxData[];
+  selectedFieldId: string | null;
+  onSelectField: (fieldId: string) => void;
 };
 
-export default function FieldLayer({ fields }: FieldLayerProps) {
+export default function FieldLayer({
+  fields,
+  selectedFieldId,
+  onSelectField,
+}: FieldLayerProps) {
   return (
     <div style={styles.layer}>
       {fields.map((field) => (
-        <FieldBox key={field.id} field={field} />
+        <FieldBox
+          key={field.id}
+          field={field}
+          selected={field.id === selectedFieldId}
+          onSelect={onSelectField}
+        />
       ))}
     </div>
   );
