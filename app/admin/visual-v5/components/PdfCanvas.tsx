@@ -7,22 +7,11 @@ import {
   saveFieldsForProject,
   type VeeField,
 } from "../lib/db";
+import FieldLayer, { type FieldBoxData } from "./FieldLayer";
 
 type PdfCanvasProps = {
   pdfUrl: string;
   projectId?: string;
-};
-
-type FieldBox = {
-  id: string;
-  dbId?: string;
-  page: number;
-  questionNumber: number;
-  fieldType: string;
-  xPercent: number;
-  yPercent: number;
-  widthPercent: number;
-  heightPercent: number;
 };
 
 export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
@@ -33,7 +22,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
   const [numPages, setNumPages] = useState(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const [fields, setFields] = useState<FieldBox[]>([]);
+  const [fields, setFields] = useState<FieldBoxData[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
@@ -48,17 +37,19 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
 
         const savedFields = await getFieldsByProjectId(projectId);
 
-        const mappedFields: FieldBox[] = savedFields.map((field: any, index: number) => ({
-          id: field.id || String(Date.now() + index),
-          dbId: field.id,
-          page: Number(field.metadata?.page || 1),
-          questionNumber: Number(field.question_number || index + 1),
-          fieldType: field.field_type || "text",
-          xPercent: Number(field.x || 0),
-          yPercent: Number(field.y || 0),
-          widthPercent: Number(field.width || 10),
-          heightPercent: Number(field.height || 3),
-        }));
+        const mappedFields: FieldBoxData[] = savedFields.map(
+          (field: any, index: number) => ({
+            id: field.id || String(Date.now() + index),
+            dbId: field.id,
+            page: Number(field.metadata?.page || 1),
+            questionNumber: Number(field.question_number || index + 1),
+            fieldType: field.field_type || "text",
+            xPercent: Number(field.x || 0),
+            yPercent: Number(field.y || 0),
+            widthPercent: Number(field.width || 10),
+            heightPercent: Number(field.height || 3),
+          })
+        );
 
         setFields(mappedFields);
         setStatusMessage(
@@ -174,7 +165,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
         ? Math.max(...fields.map((field) => field.questionNumber)) + 1
         : 1;
 
-    const newField: FieldBox = {
+    const newField: FieldBoxData = {
       id: String(Date.now()),
       page: pageNumber,
       questionNumber: nextQuestionNumber,
@@ -222,17 +213,19 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
 
       const saved = await saveFieldsForProject(projectId, rows);
 
-      const mappedFields: FieldBox[] = saved.map((field: any, index: number) => ({
-        id: field.id || String(Date.now() + index),
-        dbId: field.id,
-        page: Number(field.metadata?.page || 1),
-        questionNumber: Number(field.question_number || index + 1),
-        fieldType: field.field_type || "text",
-        xPercent: Number(field.x || 0),
-        yPercent: Number(field.y || 0),
-        widthPercent: Number(field.width || 10),
-        heightPercent: Number(field.height || 3),
-      }));
+      const mappedFields: FieldBoxData[] = saved.map(
+        (field: any, index: number) => ({
+          id: field.id || String(Date.now() + index),
+          dbId: field.id,
+          page: Number(field.metadata?.page || 1),
+          questionNumber: Number(field.question_number || index + 1),
+          fieldType: field.field_type || "text",
+          xPercent: Number(field.x || 0),
+          yPercent: Number(field.y || 0),
+          widthPercent: Number(field.width || 10),
+          heightPercent: Number(field.height || 3),
+        })
+      );
 
       setFields(mappedFields);
       setStatusMessage(`Campos salvos com sucesso: ${mappedFields.length}`);
@@ -342,20 +335,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
         >
           <canvas ref={canvasRef} style={styles.canvas} />
 
-          {visibleFields.map((field) => (
-            <div
-              key={field.id}
-              style={{
-                ...styles.fieldBox,
-                left: `${field.xPercent}%`,
-                top: `${field.yPercent}%`,
-                width: `${field.widthPercent}%`,
-                height: `${field.heightPercent}%`,
-              }}
-            >
-              Q{field.questionNumber}
-            </div>
-          ))}
+          <FieldLayer fields={visibleFields} />
         </div>
       </div>
 
@@ -443,20 +423,6 @@ const styles: Record<string, CSSProperties> = {
   },
   canvas: {
     display: "block",
-  },
-  fieldBox: {
-    position: "absolute",
-    transform: "translate(-50%, -50%)",
-    border: "2px solid #2563eb",
-    background: "rgba(37, 99, 235, 0.12)",
-    color: "#1d4ed8",
-    fontSize: "12px",
-    fontWeight: 800,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    pointerEvents: "none",
-    borderRadius: "4px",
   },
   status: {
     marginTop: "12px",
