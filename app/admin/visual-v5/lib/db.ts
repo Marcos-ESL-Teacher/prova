@@ -19,6 +19,8 @@ export type VeeField = {
   is_deleted?: boolean;
 };
 
+const DEFAULT_FIELD_TYPE = "short_text";
+
 export async function getProjectByExamId(examId: string) {
   const { data, error } = await supabase
     .from("vee_projects")
@@ -100,7 +102,7 @@ export async function saveFieldsForProject(
     project_id: projectId,
     page_id: field.page_id || null,
     question_number: Number(field.question_number || index + 1),
-    field_type: field.field_type || "text",
+    field_type: field.field_type || DEFAULT_FIELD_TYPE,
     label: field.label || `Q${field.question_number || index + 1}`,
     answer_value: field.answer_value || "",
     x: Number(field.x),
@@ -131,7 +133,7 @@ export async function createField(field: VeeField) {
       project_id: field.project_id,
       page_id: field.page_id || null,
       question_number: field.question_number,
-      field_type: field.field_type || "text",
+      field_type: field.field_type || DEFAULT_FIELD_TYPE,
       label: field.label || `Q${field.question_number}`,
       answer_value: field.answer_value || "",
       x: field.x,

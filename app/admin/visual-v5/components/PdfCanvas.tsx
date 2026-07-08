@@ -14,6 +14,8 @@ type PdfCanvasProps = {
   projectId?: string;
 };
 
+const DEFAULT_FIELD_TYPE = "short_text";
+
 export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -44,7 +46,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
             dbId: field.id,
             page: Number(field.metadata?.page || 1),
             questionNumber: Number(field.question_number || index + 1),
-            fieldType: field.field_type || "text",
+            fieldType: field.field_type || DEFAULT_FIELD_TYPE,
             xPercent: Number(field.x || 0),
             yPercent: Number(field.y || 0),
             widthPercent: Number(field.width || 10),
@@ -172,7 +174,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
       id: String(Date.now()),
       page: pageNumber,
       questionNumber: nextQuestionNumber,
-      fieldType: "text",
+      fieldType: DEFAULT_FIELD_TYPE,
       xPercent: Number(xPercent.toFixed(3)),
       yPercent: Number(yPercent.toFixed(3)),
       widthPercent: 10,
@@ -228,6 +230,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
       ...selected,
       id: String(Date.now()),
       dbId: undefined,
+      fieldType: selected.fieldType || DEFAULT_FIELD_TYPE,
       questionNumber: nextQuestionNumber,
       xPercent: Math.min(98, Number((selected.xPercent + 2).toFixed(3))),
       yPercent: Math.min(98, Number((selected.yPercent + 2).toFixed(3))),
@@ -255,7 +258,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
         project_id: projectId,
         page_id: null,
         question_number: field.questionNumber,
-        field_type: field.fieldType,
+        field_type: field.fieldType || DEFAULT_FIELD_TYPE,
         label: `Q${field.questionNumber}`,
         answer_value: "",
         x: Number(field.xPercent.toFixed(3)),
@@ -279,7 +282,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
           dbId: field.id,
           page: Number(field.metadata?.page || 1),
           questionNumber: Number(field.question_number || index + 1),
-          fieldType: field.field_type || "text",
+          fieldType: field.field_type || DEFAULT_FIELD_TYPE,
           xPercent: Number(field.x || 0),
           yPercent: Number(field.y || 0),
           widthPercent: Number(field.width || 10),
