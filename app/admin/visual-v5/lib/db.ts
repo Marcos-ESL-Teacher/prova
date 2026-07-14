@@ -21,6 +21,68 @@ export type VeeField = {
 
 const DEFAULT_FIELD_TYPE = "short_text";
 
+
+export type VeeProject = {
+  id: string;
+  exam_id?: string | null;
+  pdf_path?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: unknown;
+};
+
+export async function getProjectById(
+  projectId: string
+): Promise<VeeProject | null> {
+  const normalizedProjectId = projectId.trim();
+
+  if (!normalizedProjectId) {
+    throw new Error("Project ID não informado.");
+  }
+
+  const { data, error } = await supabase
+    .from("vee_projects")
+    .select("*")
+    .eq("id", normalizedProjectId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data;
+}
+
+export async function getPdfSignedUrl(
+  pdfPath: string,
+  expiresInSeconds = 60 * 60
+): Promise<string> {
+  const normalizedPdfPath = pdfPath.trim();
+
+  console.log("========== PDF ==========");
+  console.log("pdfPath:", normalizedPdfPath);
+
+  if (!normalizedPdfPath) {
+    throw new Error("O projeto não possui pdf_path.");
+  }
+
+  const { data, error } = await supabase.storage
+    .from("exam-pdfs")
+    .createSignedUrl(normalizedPdfPath, expiresInSeconds);
+
+  console.log("signedUrl data:", data);
+  console.log("signedUrl error:", error);
+
+  if (error) throw error;
+
+  if (!data?.signedUrl) {
+    throw new Error("Não foi possível gerar a URL assinada do PDF.");
+  }
+
+  console.log("signedUrl:", data.signedUrl);
+
+  return data.signedUrl;
+}
+
 export async function getProjectByExamId(examId: string) {
   const { data, error } = await supabase
     .from("vee_projects")
