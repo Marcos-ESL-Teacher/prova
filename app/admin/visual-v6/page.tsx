@@ -692,6 +692,30 @@ export default function VisualV6Page() {
     );
   }
 
+  useEffect(() => {
+    function handleDeleteKey(event: KeyboardEvent) {
+      if (event.key !== "Delete" || !selectedFieldId) return;
+
+      const target = event.target as HTMLElement | null;
+      const isEditingText =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        Boolean(target?.isContentEditable);
+
+      if (isEditingText) return;
+
+      event.preventDefault();
+      deleteSelectedField();
+    }
+
+    window.addEventListener("keydown", handleDeleteKey);
+
+    return () => {
+      window.removeEventListener("keydown", handleDeleteKey);
+    };
+  }, [selectedFieldId]);
+
   function goPreviousPage() {
     setPageNumber((current) => Math.max(1, current - 1));
     setSelectedFieldId(null);
