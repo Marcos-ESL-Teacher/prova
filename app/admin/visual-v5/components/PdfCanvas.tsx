@@ -19,6 +19,9 @@ const DEFAULT_FIELD_TYPE = "short_text";
 export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasWrapRef = useRef<HTMLDivElement | null>(null);
+  const dragOffsetRef = useRef({ xPercent: 0, yPercent: 0 });
+  const didDragRef = useRef(false);
 
   const [pdf, setPdf] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
@@ -26,6 +29,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [fields, setFields] = useState<FieldBoxData[]>([]);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
+  const [dragFieldId, setDragFieldId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
@@ -154,8 +158,90 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
     };
   }, [pdf, pageNumber]);
 
+  function updateFieldPosition(
+    fieldId: string,
+    xPercent: number,
+    yPercent: number
+  ) {
+    setFields((current) =>
+      current.map((field) => {
+        if (field.id !== fieldId) return field;
+
+        const halfWidth = field.widthPercent / 2;
+        const halfHeight = field.heightPercent / 2;
+
+        return {
+          ...field,
+          xPercent: Number(
+            Math.max(halfWidth, Math.min(100 - halfWidth, xPercent)).toFixed(3)
+          ),
+          yPercent: Number(
+            Math.max(halfHeight, Math.min(100 - halfHeight, yPercent)).toFixed(3)
+          ),
+        };
+      })
+    );
+  }
+
+  function handleDragStart(
+    fieldId: string,
+    event: MouseEvent<HTMLDivElement>
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const field = fields.find((item) => item.id === fieldId);
+    const canvasWrap = canvasWrapRef.current;
+
+    if (!field || !canvasWrap) return;
+
+    const rect = canvasWrap.getBoundingClientRect();
+    const pointerXPercent = ((event.clientX - rect.left) / rect.width) * 100;
+    const pointerYPercent = ((event.clientY - rect.top) / rect.height) * 100;
+
+    dragOffsetRef.current = {
+      xPercent: pointerXPercent - field.xPercent,
+      yPercent: pointerYPercent - field.yPercent,
+    };
+
+    didDragRef.current = false;
+    setDragFieldId(fieldId);
+    setSelectedFieldId(fieldId);
+    setStatusMessage(`Movendo campo Q${field.questionNumber}...`);
+  }
+
+  function handleDragMove(event: MouseEvent<HTMLDivElement>) {
+    if (!dragFieldId) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointerXPercent = ((event.clientX - rect.left) / rect.width) * 100;
+    const pointerYPercent = ((event.clientY - rect.top) / rect.height) * 100;
+
+    didDragRef.current = true;
+
+    updateFieldPosition(
+      dragFieldId,
+      pointerXPercent - dragOffsetRef.current.xPercent,
+      pointerYPercent - dragOffsetRef.current.yPercent
+    );
+  }
+
+  function handleDragEnd() {
+    if (!dragFieldId) return;
+
+    const movedField = fields.find((field) => field.id === dragFieldId);
+
+    setDragFieldId(null);
+
+    if (didDragRef.current && movedField) {
+      setStatusMessage(
+        `Campo Q${movedField.questionNumber} movido. Clique em Salvar.`
+      );
+    }
+  }
+
   function handleCanvasClick(event: MouseEvent<HTMLDivElement>) {
-    if (!canvasSize.width || !canvasSize.height) return;
+    if (!canvasSize.width || !canvasSize.height || dragFieldId) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
 
@@ -417,12 +503,17 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
 
       <div style={styles.stage}>
         <div
+          ref={canvasWrapRef}
           style={{
             ...styles.canvasWrap,
             width: canvasSize.width || "auto",
             height: canvasSize.height || "auto",
+            cursor: dragFieldId ? "grabbing" : "crosshair",
           }}
           onClick={handleCanvasClick}
+          onMouseMove={handleDragMove}
+          onMouseUp={handleDragEnd}
+          onMouseLeave={handleDragEnd}
         >
           <canvas ref={canvasRef} style={styles.canvas} />
 
@@ -430,6 +521,7 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
             fields={visibleFields}
             selectedFieldId={selectedFieldId}
             onSelectField={handleSelectField}
+            onDragStart={handleDragStart}
           />
         </div>
       </div>

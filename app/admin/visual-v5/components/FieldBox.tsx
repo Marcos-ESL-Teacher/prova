@@ -7,17 +7,27 @@ type FieldBoxProps = {
   field: FieldBoxData;
   selected: boolean;
   onSelect: (fieldId: string) => void;
+  onDragStart: (
+    fieldId: string,
+    event: React.MouseEvent<HTMLDivElement>
+  ) => void;
 };
 
-export default function FieldBox({ field, selected, onSelect }: FieldBoxProps) {
+export default function FieldBox({
+  field,
+  selected,
+  onSelect,
+  onDragStart,
+}: FieldBoxProps) {
   function handleClick(event: MouseEvent<HTMLDivElement>) {
     event.stopPropagation();
     onSelect(field.id);
   }
 
   return (
-    <div
-      onClick={handleClick}
+<div
+  onClick={handleClick}
+  onMouseDown={(e) => onDragStart(field.id, e)}
       style={{
         ...styles.fieldBox,
         ...(selected ? styles.selectedFieldBox : {}),
