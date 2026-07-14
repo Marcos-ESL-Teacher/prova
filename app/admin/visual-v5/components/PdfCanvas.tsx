@@ -8,20 +8,29 @@ import {
   type VeeField,
 } from "../lib/db";
 import FieldLayer, { type FieldBoxData } from "./FieldLayer";
+import type { ToolMode } from "./Toolbar";
 
 type PdfCanvasProps = {
   pdfUrl: string;
   projectId?: string;
+  activeTool: ToolMode;
+  saveRequest?: number;
 };
 
 const DEFAULT_FIELD_TYPE = "short_text";
 
-export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
+export default function PdfCanvas({
+  pdfUrl,
+  projectId,
+  activeTool,
+  saveRequest = 0,
+}: PdfCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const dragOffsetRef = useRef({ xPercent: 0, yPercent: 0 });
   const didDragRef = useRef(false);
+  const lastSaveRequestRef = useRef(0);
 
   const [pdf, setPdf] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
@@ -158,6 +167,15 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
     };
   }, [pdf, pageNumber]);
 
+  useEffect(() => {
+    if (saveRequest <= 0 || saveRequest === lastSaveRequestRef.current) return;
+
+    lastSaveRequestRef.current = saveRequest;
+    void handleSaveFields();
+    // handleSaveFields is a function declaration and is available here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveRequest]);
+
   function updateFieldPosition(
     fieldId: string,
     xPercent: number,
@@ -187,6 +205,8 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
     fieldId: string,
     event: MouseEvent<HTMLDivElement>
   ) {
+    if (activeTool !== "select") return;
+
     event.preventDefault();
     event.stopPropagation();
 
@@ -241,35 +261,71 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
   }
 
   function handleCanvasClick(event: MouseEvent<HTMLDivElement>) {
-    if (!canvasSize.width || !canvasSize.height || dragFieldId) return;
+    if (
+      !canvasSize.width ||
+      !canvasSize.height ||
+      dragFieldId ||
+      activeTool === "select"
+    ) {
+      return;
+    }
 
     const rect = event.currentTarget.getBoundingClientRect();
-
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-
-    const xPercent = (x / rect.width) * 100;
-    const yPercent = (y / rect.height) * 100;
+    const xPercent = ((event.clientX - rect.left) / rect.width) * 100;
+    const yPercent = ((event.clientY - rect.top) / rect.height) * 100;
 
     const nextQuestionNumber =
       fields.length > 0
         ? Math.max(...fields.map((field) => field.questionNumber)) + 1
         : 1;
 
+    const fieldSettings: Record<
+      Exclude<ToolMode, "select">,
+      {
+        fieldType: string;
+        widthPercent: number;
+        heightPercent: number;
+        label: string;
+      }
+    > = {
+      text: {
+        fieldType: "short_text",
+        widthPercent: 18,
+        heightPercent: 3.5,
+        label: "Texto",
+      },
+      choice: {
+        fieldType: "choice",
+        widthPercent: 4,
+        heightPercent: 3.5,
+        label: "Alternativa",
+      },
+      checkbox: {
+        fieldType: "checkbox",
+        widthPercent: 3.5,
+        heightPercent: 3.5,
+        label: "Checkbox",
+      },
+    };
+
+    const settings = fieldSettings[activeTool];
+
     const newField: FieldBoxData = {
       id: String(Date.now()),
       page: pageNumber,
       questionNumber: nextQuestionNumber,
-      fieldType: DEFAULT_FIELD_TYPE,
+      fieldType: settings.fieldType,
       xPercent: Number(xPercent.toFixed(3)),
       yPercent: Number(yPercent.toFixed(3)),
-      widthPercent: 10,
-      heightPercent: 3,
+      widthPercent: settings.widthPercent,
+      heightPercent: settings.heightPercent,
     };
 
-    setFields((prev) => [...prev, newField]);
+    setFields((previous) => [...previous, newField]);
     setSelectedFieldId(newField.id);
-    setStatusMessage(`Campo Q${nextQuestionNumber} criado. Clique em Salvar.`);
+    setStatusMessage(
+      `${settings.label} Q${nextQuestionNumber} criado. Clique em Salvar.`
+    );
   }
 
   function handleSelectField(fieldId: string) {
@@ -485,9 +541,21 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
         </button>
       </div>
 
+      <div style={styles.toolInfo}>
+        Ferramenta ativa:{" "}
+        <strong>
+          {activeTool === "select" && "Selecionar"}
+          {activeTool === "text" && "Texto"}
+          {activeTool === "choice" && "Alternativa"}
+          {activeTool === "checkbox" && "Checkbox"}
+        </strong>
+      </div>
+
       {selectedField && (
         <div style={styles.selectedInfo}>
           Campo selecionado: <strong>Q{selectedField.questionNumber}</strong>
+          {" — "}
+          Tipo: <strong>{selectedField.fieldType}</strong>
         </div>
       )}
 
@@ -508,7 +576,12 @@ export default function PdfCanvas({ pdfUrl, projectId }: PdfCanvasProps) {
             ...styles.canvasWrap,
             width: canvasSize.width || "auto",
             height: canvasSize.height || "auto",
-            cursor: dragFieldId ? "grabbing" : "crosshair",
+            cursor:
+              activeTool === "select"
+                ? dragFieldId
+                  ? "grabbing"
+                  : "default"
+                : "crosshair",
           }}
           onClick={handleCanvasClick}
           onMouseMove={handleDragMove}
@@ -589,6 +662,14 @@ const styles: Record<string, CSSProperties> = {
     padding: "10px 12px",
     fontWeight: 800,
     cursor: "pointer",
+  },
+  toolInfo: {
+    marginBottom: "12px",
+    padding: "10px 12px",
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    borderRadius: "10px",
+    color: "#334155",
   },
   selectedInfo: {
     marginBottom: "12px",

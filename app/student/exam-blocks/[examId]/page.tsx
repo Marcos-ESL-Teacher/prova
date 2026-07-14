@@ -26,9 +26,10 @@ type ExamBlock = {
 type VisualField = {
   id: string;
   exam_id: string;
+  project_id?: string | null;
   page_number: number;
   question_number: number;
-  field_type: "choice" | "text" | "essay" | "doubt";
+  field_type: string;
   answer_value?: string | null;
   x: number;
   y: number;
@@ -152,33 +153,88 @@ export default function StudentExamBlocksPage() {
 
     setBlocks(blocksData || []);
 
-    const { data: fieldsData, error: fieldsError } = await supabase
-      .from("exam_visual_fields")
-      .select("*")
-      .eq("exam_id", examId)
-      .order("page_number", { ascending: true })
-      .order("question_number", { ascending: true });
+    // Primeiro tenta carregar os campos do VEE novo (vee_projects + vee_fields).
+    // Se não houver projeto VEE vinculado, mantém compatibilidade com a tabela antiga.
+    let loadedVisualFields: VisualField[] = [];
 
-    if (fieldsError) {
-      console.log("Erro ao carregar campos visuais:", fieldsError.message);
-    } else {
-      setVisualFields(
-        (fieldsData || []).map((field: any) => ({
+    let veeProjectId =
+      examData?.vee_project_id ||
+      examData?.visual_project_id ||
+      examData?.project_id ||
+      "";
+
+    if (!veeProjectId) {
+      const { data: projectRows, error: projectError } = await supabase
+        .from("vee_projects")
+        .select("id")
+        .eq("exam_id", examId)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+
+      if (projectError) {
+        console.log("Não foi possível localizar o projeto VEE:", projectError.message);
+      } else if (Array.isArray(projectRows) && projectRows.length > 0) {
+        veeProjectId = String(projectRows[0].id);
+      }
+    }
+
+    if (veeProjectId) {
+      const { data: veeFieldsData, error: veeFieldsError } = await supabase
+        .from("vee_fields")
+        .select("*")
+        .eq("project_id", veeProjectId)
+        .eq("is_deleted", false)
+        .order("sort_order", { ascending: true });
+
+      if (veeFieldsError) {
+        console.log("Erro ao carregar campos do VEE:", veeFieldsError.message);
+      } else {
+        loadedVisualFields = (veeFieldsData || []).map((field: any) => ({
+          id: String(field.id),
+          exam_id: examId,
+          project_id: String(field.project_id || veeProjectId),
+          page_number: Number(field.metadata?.page || 1),
+          question_number: Number(field.question_number || 1),
+          field_type: String(field.field_type || "short_text"),
+          answer_value: field.answer_value || "",
+          x: Number(field.x || 0),
+          y: Number(field.y || 0),
+          width: Number(field.width || 10),
+          height: Number(field.height || 3),
+          correct_answer: field.correct_answer || "",
+        }));
+      }
+    }
+
+    if (loadedVisualFields.length === 0) {
+      const { data: fieldsData, error: fieldsError } = await supabase
+        .from("exam_visual_fields")
+        .select("*")
+        .eq("exam_id", examId)
+        .order("page_number", { ascending: true })
+        .order("question_number", { ascending: true });
+
+      if (fieldsError) {
+        console.log("Erro ao carregar campos visuais antigos:", fieldsError.message);
+      } else {
+        loadedVisualFields = (fieldsData || []).map((field: any) => ({
           id: String(field.id),
           exam_id: String(field.exam_id),
+          project_id: null,
           page_number: Number(field.page_number || 1),
           question_number: Number(field.question_number || 1),
-          field_type: field.field_type || "text",
+          field_type: String(field.field_type || "text"),
           answer_value: field.answer_value || "",
           x: Number(field.x || 0),
           y: Number(field.y || 0),
           width: Number(field.width || 8),
           height: Number(field.height || 4),
           correct_answer: field.correct_answer || "",
-        }))
-      );
+        }));
+      }
     }
 
+    setVisualFields(loadedVisualFields);
     setLoading(false);
   }
 
@@ -563,6 +619,9 @@ function renderVisualFieldV5(field: VisualField) {
   return (
     <input
       key={field.id}
+      type="text"
+      aria-label={`Resposta da questão ${field.question_number}`}
+      placeholder="Digite aqui"
       value={answers[questionKey] || ""}
       onChange={(e) =>
         updateAnswer(questionKey, e.target.value)

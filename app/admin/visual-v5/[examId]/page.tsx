@@ -8,9 +8,10 @@ import { getOrCreateProject, updateProjectPdf } from "../lib/db";
 import { getVeePdfUrl, uploadVeePdf } from "../lib/storage";
 import type { VeeProject } from "../types";
 import PdfCanvas from "../components/PdfCanvas";
-import Toolbar from "../components/Toolbar";
-
-type ViewMode = "pdf" | "iframe";
+import Toolbar, {
+  type ToolMode,
+  type ViewMode,
+} from "../components/Toolbar";
 
 export default function VisualV5ExamPage() {
   const params = useParams();
@@ -22,7 +23,9 @@ export default function VisualV5ExamPage() {
   const [pdfUrl, setPdfUrl] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("iframe");
+  const [viewMode, setViewMode] = useState<ViewMode>("pdf");
+  const [activeTool, setActiveTool] = useState<ToolMode>("select");
+  const [saveRequest, setSaveRequest] = useState(0);
 
   useEffect(() => {
     async function loadProject() {
@@ -67,7 +70,8 @@ export default function VisualV5ExamPage() {
 
       setProject(updatedProject);
       setPdfUrl(signedUrl);
-      setViewMode("iframe");
+      setViewMode("pdf");
+      setActiveTool("select");
       setMessage("PDF enviado com sucesso.");
     } catch (error: any) {
       setErrorMessage(error?.message || "Erro ao enviar PDF.");
@@ -75,6 +79,16 @@ export default function VisualV5ExamPage() {
     } finally {
       setUploading(false);
     }
+  }
+
+  function handleToolChange(tool: ToolMode) {
+    setActiveTool(tool);
+    setViewMode("pdf");
+  }
+
+  function handleToolbarSave() {
+    setViewMode("pdf");
+    setSaveRequest((current) => current + 1);
   }
 
   return (
@@ -89,16 +103,12 @@ export default function VisualV5ExamPage() {
         {loading && <p>Carregando projeto visual...</p>}
 
         {!loading && errorMessage && (
-          <p style={{ color: "#dc2626", fontWeight: 700 }}>
-            {errorMessage}
-          </p>
+          <p style={{ color: "#dc2626", fontWeight: 700 }}>{errorMessage}</p>
         )}
 
         {!loading && project && (
           <>
-            <h2 style={{ marginTop: 0 }}>
-              Projeto VEE aberto ✅
-            </h2>
+            <h2 style={{ marginTop: 0 }}>Projeto VEE aberto ✅</h2>
 
             <p>
               <strong>Project ID:</strong> {project.id}
@@ -128,9 +138,7 @@ export default function VisualV5ExamPage() {
               {uploading && <p>Enviando...</p>}
 
               {message && (
-                <p style={{ color: "#166534", fontWeight: 700 }}>
-                  {message}
-                </p>
+                <p style={{ color: "#166534", fontWeight: 700 }}>{message}</p>
               )}
             </div>
 
@@ -138,8 +146,22 @@ export default function VisualV5ExamPage() {
               <>
                 <Toolbar
                   viewMode={viewMode}
+                  activeTool={activeTool}
                   onChangeViewMode={setViewMode}
+                  onChangeTool={handleToolChange}
+                  onSave={handleToolbarSave}
                 />
+
+                <div style={toolHelpBox}>
+                  {activeTool === "select" &&
+                    "Selecionar: clique em uma caixa para selecionar. Segure e arraste para mover."}
+                  {activeTool === "text" &&
+                    "Texto: clique no PDF para criar um campo em que o aluno poderá escrever."}
+                  {activeTool === "choice" &&
+                    "Alternativa: clique no PDF para criar um campo de alternativa."}
+                  {activeTool === "checkbox" &&
+                    "Checkbox: clique no PDF para criar um campo marcável."}
+                </div>
 
                 <div style={previewBox}>
                   <h3>
@@ -152,6 +174,8 @@ export default function VisualV5ExamPage() {
                     <PdfCanvas
                       pdfUrl={pdfUrl}
                       projectId={project.id}
+                      activeTool={activeTool}
+                      saveRequest={saveRequest}
                     />
                   ) : (
                     <iframe
@@ -176,6 +200,16 @@ const uploadBox: CSSProperties = {
   borderRadius: "14px",
   background: "#f8fafc",
   border: "1px dashed #93c5fd",
+};
+
+const toolHelpBox: CSSProperties = {
+  marginTop: "12px",
+  padding: "12px 14px",
+  borderRadius: "12px",
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  color: "#1e40af",
+  fontWeight: 700,
 };
 
 const previewBox: CSSProperties = {
