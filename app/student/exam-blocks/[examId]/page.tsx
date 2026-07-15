@@ -50,6 +50,8 @@ export default function StudentExamBlocksPage() {
   const [visualTotalPages, setVisualTotalPages] = useState(1);
   const visualPageCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const visualPdfSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const visualPaperRef = useRef<HTMLDivElement | null>(null);
+  const renderRequestRef = useRef(0);
   const [studentName, setStudentName] = useState("");
   const [studentPhone, setStudentPhone] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -67,47 +69,54 @@ export default function StudentExamBlocksPage() {
     if (!pdfUrl || !isPdfFile(pdfUrl)) return;
 
     let cancelled = false;
-    let frame1 = 0;
-    let frame2 = 0;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const retryTimers: Array<ReturnType<typeof setTimeout>> = [];
 
-    const renderAfterLayout = () => {
-      frame1 = window.requestAnimationFrame(() => {
-        frame2 = window.requestAnimationFrame(() => {
-          if (!cancelled) void renderVisualPdfPage();
-        });
-      });
+    const requestRender = (delay: number) => {
+      const timer = setTimeout(() => {
+        if (!cancelled) void renderVisualPdfPage();
+      }, delay);
+
+      retryTimers.push(timer);
     };
 
-    renderAfterLayout();
+    // A primeira renderização pode acontecer antes de o cartão terminar
+    // de assumir a largura definitiva no Vercel. Fazemos tentativas curtas
+    // após o layout estabilizar.
+    requestRender(0);
+    requestRender(150);
+    requestRender(450);
 
-    const surface = visualPdfSurfaceRef.current;
+    const paper = visualPaperRef.current;
     const observer =
-      typeof ResizeObserver !== "undefined" && surface
+      typeof ResizeObserver !== "undefined" && paper
         ? new ResizeObserver(() => {
             if (resizeTimer) clearTimeout(resizeTimer);
+
             resizeTimer = setTimeout(() => {
               if (!cancelled) void renderVisualPdfPage();
-            }, 80);
+            }, 100);
           })
         : null;
 
-    if (surface && observer) observer.observe(surface);
+    if (paper && observer) observer.observe(paper);
 
     const handleResize = () => {
       if (resizeTimer) clearTimeout(resizeTimer);
+
       resizeTimer = setTimeout(() => {
         if (!cancelled) void renderVisualPdfPage();
-      }, 120);
+      }, 140);
     };
 
     window.addEventListener("resize", handleResize);
 
     return () => {
       cancelled = true;
-      window.cancelAnimationFrame(frame1);
-      window.cancelAnimationFrame(frame2);
+
+      retryTimers.forEach((timer) => clearTimeout(timer));
       if (resizeTimer) clearTimeout(resizeTimer);
+
       observer?.disconnect();
       window.removeEventListener("resize", handleResize);
     };
@@ -124,6 +133,8 @@ export default function StudentExamBlocksPage() {
     const canvas = visualPageCanvasRef.current;
     if (!canvas || !pdfUrl || !isPdfFile(pdfUrl)) return;
 
+    const requestId = ++renderRequestRef.current;
+
     try {
       const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
       pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -136,19 +147,21 @@ export default function StudentExamBlocksPage() {
       const page = await pdf.getPage(pageNumber);
       const baseViewport = page.getViewport({ scale: 1 });
 
-      const surface = visualPdfSurfaceRef.current;
-      const measuredWidth =
-        surface?.parentElement?.clientWidth ||
-        surface?.clientWidth ||
+      const paperWidth =
+        visualPaperRef.current?.clientWidth ||
+        visualPdfSurfaceRef.current?.parentElement?.clientWidth ||
         window.innerWidth * 0.82;
 
       const availableWidth = Math.min(
         900,
-        Math.max(320, measuredWidth - 8)
+        Math.max(320, paperWidth - 30)
       );
 
       const scale = availableWidth / baseViewport.width;
       const viewport = page.getViewport({ scale });
+
+      if (requestId !== renderRequestRef.current) return;
+
       const dpr = window.devicePixelRatio || 1;
       const context = canvas.getContext("2d");
       if (!context) return;
@@ -918,7 +931,7 @@ function renderVisualFieldV5(field: VisualField) {
               </button>
             </div>
 
-<div style={styles.visualPaperStable}>
+<div ref={visualPaperRef} style={styles.visualPaperStable}>
   <div ref={visualPdfSurfaceRef} style={styles.visualPdfSurface}>
     {isPdfFile(pdfUrl) ? (
       <canvas
