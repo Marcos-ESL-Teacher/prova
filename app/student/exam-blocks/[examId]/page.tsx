@@ -49,6 +49,7 @@ export default function StudentExamBlocksPage() {
   const [visualCurrentPage, setVisualCurrentPage] = useState(1);
   const [visualTotalPages, setVisualTotalPages] = useState(1);
   const visualPageCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const visualPdfSurfaceRef = useRef<HTMLDivElement | null>(null);
   const [studentName, setStudentName] = useState("");
   const [studentPhone, setStudentPhone] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -64,7 +65,53 @@ export default function StudentExamBlocksPage() {
 
   useEffect(() => {
     if (!pdfUrl || !isPdfFile(pdfUrl)) return;
-    renderVisualPdfPage();
+
+    let cancelled = false;
+    let frame1 = 0;
+    let frame2 = 0;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const renderAfterLayout = () => {
+      frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          if (!cancelled) void renderVisualPdfPage();
+        });
+      });
+    };
+
+    renderAfterLayout();
+
+    const surface = visualPdfSurfaceRef.current;
+    const observer =
+      typeof ResizeObserver !== "undefined" && surface
+        ? new ResizeObserver(() => {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+              if (!cancelled) void renderVisualPdfPage();
+            }, 80);
+          })
+        : null;
+
+    if (surface && observer) observer.observe(surface);
+
+    const handleResize = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (!cancelled) void renderVisualPdfPage();
+      }, 120);
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame1);
+      window.cancelAnimationFrame(frame2);
+      if (resizeTimer) clearTimeout(resizeTimer);
+      observer?.disconnect();
+      window.removeEventListener("resize", handleResize);
+    };
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfUrl, visualCurrentPage]);
 
@@ -89,7 +136,17 @@ export default function StudentExamBlocksPage() {
       const page = await pdf.getPage(pageNumber);
       const baseViewport = page.getViewport({ scale: 1 });
 
-      const availableWidth = Math.min(900, Math.max(620, window.innerWidth * 0.82));
+      const surface = visualPdfSurfaceRef.current;
+      const measuredWidth =
+        surface?.parentElement?.clientWidth ||
+        surface?.clientWidth ||
+        window.innerWidth * 0.82;
+
+      const availableWidth = Math.min(
+        900,
+        Math.max(320, measuredWidth - 8)
+      );
+
       const scale = availableWidth / baseViewport.width;
       const viewport = page.getViewport({ scale });
       const dpr = window.devicePixelRatio || 1;
@@ -862,7 +919,7 @@ function renderVisualFieldV5(field: VisualField) {
             </div>
 
 <div style={styles.visualPaperStable}>
-  <div style={styles.visualPdfSurface}>
+  <div ref={visualPdfSurfaceRef} style={styles.visualPdfSurface}>
     {isPdfFile(pdfUrl) ? (
       <canvas
         ref={visualPageCanvasRef}
@@ -1444,8 +1501,7 @@ const styles: any = {
   visualPdfSurface: {
     position: "relative",
     width: "fit-content",
-    minWidth: "320px",
-    minHeight: "320px",
+    minHeight: "1px",
     margin: "0 auto",
     background: "#fff",
     isolation: "isolate",
