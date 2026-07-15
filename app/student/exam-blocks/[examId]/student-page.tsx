@@ -623,6 +623,43 @@ function renderVisualFieldV5(field: VisualField) {
     );
   }
 
+  if (field.field_type === "checkbox") {
+    const optionValue = String(field.answer_value || "");
+    const currentValues = String(answers[questionKey] || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const checked = currentValues.includes(optionValue);
+
+    function toggleCheckbox() {
+      const nextValues = checked
+        ? currentValues.filter((value) => value !== optionValue)
+        : [...currentValues, optionValue];
+
+      updateAnswer(questionKey, nextValues.join(","));
+    }
+
+    return (
+      <button
+        key={field.id}
+        type="button"
+        aria-pressed={checked}
+        onClick={toggleCheckbox}
+        style={{
+          ...styles.visualAnswerField,
+          ...(checked ? styles.visualChoiceSelected : {}),
+          left: `${field.x}%`,
+          top: `${field.y}%`,
+          width: `${field.width}%`,
+          height: `${field.height}%`,
+          pointerEvents: "auto",
+        }}
+      >
+        {checked ? "☑" : "☐"} {optionValue}
+      </button>
+    );
+  }
+
   if (field.field_type === "essay") {
     return (
       <textarea
@@ -670,6 +707,9 @@ function renderVisualFieldV5(field: VisualField) {
     const firstField = fields[0];
     const questionKey = `visual_q_${questionNumber}`;
     const hasChoice = fields.some((field) => field.field_type === "choice");
+    const hasCheckbox = fields.some(
+      (field) => field.field_type === "checkbox"
+    );
     const hasEssay = fields.some((field) => field.field_type === "essay" || field.field_type === "doubt");
 
     if (hasChoice) {
@@ -703,6 +743,53 @@ function renderVisualFieldV5(field: VisualField) {
                 <span style={styles.optionLetter}>{letter}</span>
               </label>
             ))}
+          </div>
+        </section>
+      );
+    }
+
+    if (hasCheckbox) {
+      const options = fields
+        .filter((field) => field.field_type === "checkbox")
+        .map((field) => String(field.answer_value || "").trim())
+        .filter(Boolean);
+
+      const selectedValues = String(answers[questionKey] || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+      return (
+        <section key={questionNumber} style={styles.stableQuestionCard}>
+          <h3 style={styles.questionTitle}>Question {questionNumber}</h3>
+
+          <div style={styles.stableOptionsGrid}>
+            {options.map((value) => {
+              const checked = selectedValues.includes(value);
+
+              return (
+                <label
+                  key={value}
+                  style={{
+                    ...styles.stableOption,
+                    ...(checked ? styles.optionSelected : {}),
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      const nextValues = checked
+                        ? selectedValues.filter((item) => item !== value)
+                        : [...selectedValues, value];
+
+                      updateAnswer(questionKey, nextValues.join(","));
+                    }}
+                  />
+                  <span style={styles.optionLetter}>{value}</span>
+                </label>
+              );
+            })}
           </div>
         </section>
       );

@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 
 export type ViewMode = "pdf" | "iframe";
-export type ToolMode = "select" | "text";
+export type ToolMode = "select" | "text" | "choice" | "checkbox";
 
 type ToolbarProps = {
   viewMode: ViewMode;
@@ -42,6 +42,22 @@ export default function Toolbar({
           onClick={() => choose("text")}
         >
           ✏ Texto
+        </button>
+
+        <button
+          type="button"
+          style={activeTool === "choice" ? styles.active : styles.button}
+          onClick={() => choose("choice")}
+        >
+          ⭕ Alternativa
+        </button>
+
+        <button
+          type="button"
+          style={activeTool === "checkbox" ? styles.active : styles.button}
+          onClick={() => choose("checkbox")}
+        >
+          ☑ Checkbox
         </button>
 
         <button type="button" style={styles.save} onClick={onSave}>

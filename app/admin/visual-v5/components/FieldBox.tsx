@@ -21,6 +21,13 @@ export default function FieldBox({
   onSelect,
   onPointerDown,
 }: Props) {
+  const typeLabel =
+    field.fieldType === "choice"
+      ? `⭕ ${field.answerValue || "?"}`
+      : field.fieldType === "checkbox"
+        ? `☑ ${field.answerValue || "?"}`
+        : `Q${field.questionNumber}`;
+
   return (
     <div
       data-vee-field="true"
@@ -39,9 +46,11 @@ export default function FieldBox({
         height: `${field.heightPercent}%`,
         cursor: dragging ? "grabbing" : "grab",
       }}
-      title={`Q${field.questionNumber}`}
+      title={`Q${field.questionNumber} — ${field.fieldType}${
+        field.isCorrect ? " — correta" : ""
+      }`}
     >
-      Q{field.questionNumber}
+      {typeLabel}
     </div>
   );
 }

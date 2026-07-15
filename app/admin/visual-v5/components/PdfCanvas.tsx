@@ -64,6 +64,8 @@ export default function PdfCanvas({
             yPercent: Number(field.y || 0),
             widthPercent: Number(field.width || 10),
             heightPercent: Number(field.height || 3),
+            answerValue: String(field.answer_value || ""),
+            isCorrect: Boolean(field.metadata?.correct_answer || false),
           })
         );
 
@@ -261,9 +263,48 @@ export default function PdfCanvas({
     }
   }
 
+  function askQuestionNumber(defaultNumber: number) {
+    const value = window.prompt(
+      "Número da questão:",
+      String(defaultNumber)
+    );
+
+    if (value === null) return null;
+
+    const parsed = Number(value.trim());
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      alert("Digite um número de questão válido.");
+      return null;
+    }
+
+    return Math.floor(parsed);
+  }
+
+  function askAnswerValue(label: string, defaultValue = "") {
+    const value = window.prompt(label, defaultValue);
+
+    if (value === null) return null;
+
+    const normalized = value.trim();
+
+    if (!normalized) {
+      alert("Digite um valor.");
+      return null;
+    }
+
+    return normalized;
+  }
+
+  function askIsCorrect() {
+    return window.confirm(
+      "Esta é a resposta correta?\n\nOK = Sim\nCancelar = Não"
+    );
+  }
+
   function handleCanvasClick(event: MouseEvent<HTMLDivElement>) {
     if (
-      activeTool !== "text" ||
+      activeTool === "select" ||
       !canvasSize.width ||
       !canvasSize.height ||
       dragFieldId
@@ -281,26 +322,82 @@ export default function PdfCanvas({
     const xPercent = ((event.clientX - rect.left) / rect.width) * 100;
     const yPercent = ((event.clientY - rect.top) / rect.height) * 100;
 
-    const nextQuestionNumber =
+    const suggestedQuestionNumber =
       fields.length > 0
         ? Math.max(...fields.map((field) => field.questionNumber)) + 1
         : 1;
 
+    const questionNumber = askQuestionNumber(suggestedQuestionNumber);
+
+    if (questionNumber === null) return;
+
+    let fieldType = "short_text";
+    let answerValue = "";
+    let isCorrect = false;
+    let widthPercent = 12;
+    let heightPercent = 2.8;
+    let label = "Texto";
+
+    if (activeTool === "text") {
+      const correctAnswer = askAnswerValue(
+        "Resposta correta / gabarito desta questão:"
+      );
+
+      if (correctAnswer === null) return;
+
+      answerValue = correctAnswer;
+      isCorrect = true;
+    }
+
+    if (activeTool === "choice") {
+      const optionLetter = askAnswerValue(
+        "Letra desta alternativa (A, B, C, D ou E):",
+        "A"
+      );
+
+      if (optionLetter === null) return;
+
+      fieldType = "choice";
+      answerValue = optionLetter.toUpperCase();
+      isCorrect = askIsCorrect();
+      widthPercent = 4.2;
+      heightPercent = 3.6;
+      label = `Alternativa ${answerValue}`;
+    }
+
+    if (activeTool === "checkbox") {
+      const optionValue = askAnswerValue(
+        "Valor deste checkbox (ex.: A, True, Yes):",
+        "A"
+      );
+
+      if (optionValue === null) return;
+
+      fieldType = "checkbox";
+      answerValue = optionValue;
+      isCorrect = askIsCorrect();
+      widthPercent = 4.2;
+      heightPercent = 3.6;
+      label = `Checkbox ${answerValue}`;
+    }
+
     const newField: FieldBoxData = {
       id: String(Date.now()),
       page: pageNumber,
-      questionNumber: nextQuestionNumber,
-      fieldType: "short_text",
+      questionNumber,
+      fieldType,
+      answerValue,
+      isCorrect,
       xPercent: Number(xPercent.toFixed(3)),
       yPercent: Number(yPercent.toFixed(3)),
-      widthPercent: 12,
-      heightPercent: 2.8,
+      widthPercent,
+      heightPercent,
     };
 
     setFields((previous) => [...previous, newField]);
     setSelectedFieldId(newField.id);
     setStatusMessage(
-      `Campo de texto Q${nextQuestionNumber} criado. Clique em Salvar.`
+      `${label} da Q${questionNumber} criado. Clique em Salvar.`
     );
   }
 
@@ -378,7 +475,7 @@ export default function PdfCanvas({
         question_number: field.questionNumber,
         field_type: field.fieldType || DEFAULT_FIELD_TYPE,
         label: `Q${field.questionNumber}`,
-        answer_value: "",
+        answer_value: field.answerValue || "",
         x: Number(field.xPercent.toFixed(3)),
         y: Number(field.yPercent.toFixed(3)),
         width: Number(field.widthPercent.toFixed(3)),
@@ -388,6 +485,7 @@ export default function PdfCanvas({
         sort_order: index + 1,
         metadata: {
           page: field.page,
+          correct_answer: Boolean(field.isCorrect),
         },
         is_deleted: false,
       }));
@@ -405,6 +503,8 @@ export default function PdfCanvas({
           yPercent: Number(field.y || 0),
           widthPercent: Number(field.width || 10),
           heightPercent: Number(field.height || 3),
+          answerValue: String(field.answer_value || ""),
+          isCorrect: Boolean(field.metadata?.correct_answer || false),
         })
       );
 
@@ -520,7 +620,10 @@ export default function PdfCanvas({
       <div style={styles.toolInfo}>
         Ferramenta ativa:{" "}
         <strong>
-          {activeTool === "select" ? "Mover" : "Texto"}
+          {activeTool === "select" && "Mover"}
+          {activeTool === "text" && "Texto"}
+          {activeTool === "choice" && "Alternativa"}
+          {activeTool === "checkbox" && "Checkbox"}
         </strong>
       </div>
 
@@ -529,6 +632,18 @@ export default function PdfCanvas({
           Campo selecionado: <strong>Q{selectedField.questionNumber}</strong>
           {" — "}
           Tipo: <strong>{selectedField.fieldType}</strong>
+          {selectedField.answerValue && (
+            <>
+              {" — "}
+              Valor: <strong>{selectedField.answerValue}</strong>
+            </>
+          )}
+          {selectedField.isCorrect && (
+            <>
+              {" — "}
+              <strong>Resposta correta</strong>
+            </>
+          )}
         </div>
       )}
 

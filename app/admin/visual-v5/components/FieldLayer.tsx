@@ -13,6 +13,8 @@ export type FieldBoxData = {
   yPercent: number;
   widthPercent: number;
   heightPercent: number;
+  answerValue?: string;
+  isCorrect?: boolean;
 };
 
 type Props = {

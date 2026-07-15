@@ -139,9 +139,14 @@ export default function VisualV5ExamPage() {
                 />
 
                 <div style={helpBox}>
-                  {activeTool === "select"
-                    ? "🖱 Mover: clique, segure e arraste uma caixa azul. Este modo nunca cria caixas."
-                    : "✏ Texto: clique na lacuna para criar um campo em que o aluno poderá escrever."}
+                  {activeTool === "select" &&
+                    "🖱 Mover: clique, segure e arraste uma caixa azul. Este modo nunca cria caixas."}
+                  {activeTool === "text" &&
+                    "✏ Texto: clique na lacuna, informe o número da questão e o gabarito."}
+                  {activeTool === "choice" &&
+                    "⭕ Alternativa: clique ao lado da opção e informe questão, letra e se é correta."}
+                  {activeTool === "checkbox" &&
+                    "☑ Checkbox: clique ao lado da opção e informe questão, valor e se é correta."}
                 </div>
 
                 <div style={previewBox}>
