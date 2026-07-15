@@ -49,11 +49,6 @@ export default function StudentExamBlocksPage() {
   const [visualCurrentPage, setVisualCurrentPage] = useState(1);
   const [visualTotalPages, setVisualTotalPages] = useState(1);
   const visualPageCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const visualPdfSurfaceRef = useRef<HTMLDivElement | null>(null);
-  const visualPaperRef = useRef<HTMLDivElement | null>(null);
-  const renderRequestRef = useRef(0);
-  const visualPdfDocumentRef = useRef<any>(null);
-  const visualRenderTaskRef = useRef<any>(null);
   const [studentName, setStudentName] = useState("");
   const [studentPhone, setStudentPhone] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -68,47 +63,22 @@ export default function StudentExamBlocksPage() {
   }, []);
 
   useEffect(() => {
-    if (!pdfUrl || !isPdfFile(pdfUrl)) return;
+    // Enquanto loading=true, o componente ainda mostra apenas
+    // "Carregando prova digital..." e o canvas não existe no DOM.
+    // Quando loading muda para false, este effect roda novamente,
+    // encontra o canvas montado e renderiza a página 1 corretamente.
+    if (loading || !pdfUrl || !isPdfFile(pdfUrl)) return;
 
-    let cancelled = false;
-    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const initialTimer = setTimeout(() => {
-      if (!cancelled) void renderVisualPdfPage();
-    }, 250);
-
-    const paper = visualPaperRef.current;
-    const observer =
-      typeof ResizeObserver !== "undefined" && paper
-        ? new ResizeObserver(() => {
-            if (resizeTimer) clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(() => {
-              if (!cancelled) void renderVisualPdfPage();
-            }, 160);
-          })
-        : null;
-
-    if (paper && observer) observer.observe(paper);
-
-    const handleResize = () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        if (!cancelled) void renderVisualPdfPage();
-      }, 180);
-    };
-
-    window.addEventListener("resize", handleResize);
+    const frame = window.requestAnimationFrame(() => {
+      void renderVisualPdfPage();
+    });
 
     return () => {
-      cancelled = true;
-      clearTimeout(initialTimer);
-      if (resizeTimer) clearTimeout(resizeTimer);
-      observer?.disconnect();
-      window.removeEventListener("resize", handleResize);
+      window.cancelAnimationFrame(frame);
     };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfUrl, visualCurrentPage]);
+  }, [pdfUrl, visualCurrentPage, loading]);
 
   function isPdfFile(fileUrl: string) {
     const cleanUrl = fileUrl.split("?")[0].toLowerCase();
@@ -119,8 +89,6 @@ export default function StudentExamBlocksPage() {
     const canvas = visualPageCanvasRef.current;
     if (!canvas || !pdfUrl || !isPdfFile(pdfUrl)) return;
 
-    const requestId = ++renderRequestRef.current;
-
     try {
       const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
       pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -128,30 +96,14 @@ export default function StudentExamBlocksPage() {
         import.meta.url
       ).toString();
 
-      if (!visualPdfDocumentRef.current) {
-        visualPdfDocumentRef.current = await pdfjsLib.getDocument({
-          url: pdfUrl,
-        }).promise;
-      }
-
-      const pdf = visualPdfDocumentRef.current;
+      const pdf = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
       const pageNumber = Math.min(Math.max(1, Number(visualCurrentPage || 1)), Number(pdf.numPages || 1));
       const page = await pdf.getPage(pageNumber);
       const baseViewport = page.getViewport({ scale: 1 });
 
-      const paperWidth = visualPaperRef.current?.clientWidth || 0;
-      const browserWidth = Math.max(620, window.innerWidth - 160);
-
-      const availableWidth = Math.min(
-        900,
-        paperWidth > 500 ? paperWidth - 30 : browserWidth
-      );
-
+      const availableWidth = Math.min(900, Math.max(620, window.innerWidth * 0.82));
       const scale = availableWidth / baseViewport.width;
       const viewport = page.getViewport({ scale });
-
-      if (requestId !== renderRequestRef.current) return;
-
       const dpr = window.devicePixelRatio || 1;
       const context = canvas.getContext("2d");
       if (!context) return;
@@ -162,22 +114,7 @@ export default function StudentExamBlocksPage() {
       canvas.style.height = `${viewport.height}px`;
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       context.clearRect(0, 0, viewport.width, viewport.height);
-      if (visualRenderTaskRef.current) {
-        try {
-          visualRenderTaskRef.current.cancel();
-        } catch {
-          // A tarefa anterior pode já ter terminado.
-        }
-      }
-
-      const renderTask = page.render({ canvasContext: context, viewport });
-      visualRenderTaskRef.current = renderTask;
-
-      await renderTask.promise;
-
-      if (requestId === renderRequestRef.current) {
-        visualRenderTaskRef.current = null;
-      }
+      await page.render({ canvasContext: context, viewport }).promise;
     } catch (error) {
       console.log("Erro ao renderizar PDF no aluno:", error);
     }
@@ -342,8 +279,6 @@ export default function StudentExamBlocksPage() {
   }
 
   async function loadPdf(pdfStoragePathOrUrl: string) {
-    visualPdfDocumentRef.current = null;
-
     if (!pdfStoragePathOrUrl) {
       setPdfUrl("");
       setVisualCurrentPage(1);
@@ -938,8 +873,8 @@ function renderVisualFieldV5(field: VisualField) {
               </button>
             </div>
 
-<div ref={visualPaperRef} style={styles.visualPaperStable}>
-  <div ref={visualPdfSurfaceRef} style={styles.visualPdfSurface}>
+<div style={styles.visualPaperStable}>
+  <div style={styles.visualPdfSurface}>
     {isPdfFile(pdfUrl) ? (
       <canvas
         ref={visualPageCanvasRef}
@@ -1520,9 +1455,9 @@ const styles: any = {
 
   visualPdfSurface: {
     position: "relative",
-    width: "100%",
-    maxWidth: "900px",
-    minHeight: "1px",
+    width: "fit-content",
+    minWidth: "320px",
+    minHeight: "320px",
     margin: "0 auto",
     background: "#fff",
     isolation: "isolate",
@@ -1533,8 +1468,6 @@ const styles: any = {
     position: "relative",
     zIndex: 1,
     display: "block",
-    width: "100%",
-    height: "auto",
     background: "#fff",
     pointerEvents: "none",
   },
