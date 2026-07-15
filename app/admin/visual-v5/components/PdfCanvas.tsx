@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties, MouseEvent } from "react";
+import type { CSSProperties, MouseEvent, PointerEvent } from "react";
 import {
   getFieldsByProjectId,
   saveFieldsForProject,
@@ -29,7 +29,7 @@ export default function PdfCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const dragOffsetRef = useRef({ xPercent: 0, yPercent: 0 });
-  const didDragRef = useRef(false);
+  const didMoveRef = useRef(false);
   const lastSaveRequestRef = useRef(0);
 
   const [pdf, setPdf] = useState<any>(null);
@@ -201,14 +201,16 @@ export default function PdfCanvas({
     );
   }
 
-  function handleDragStart(
+  function handleFieldPointerDown(
     fieldId: string,
-    event: MouseEvent<HTMLDivElement>
+    event: PointerEvent<HTMLDivElement>
   ) {
-    if (activeTool !== "select") return;
-
     event.preventDefault();
     event.stopPropagation();
+
+    setSelectedFieldId(fieldId);
+
+    if (activeTool !== "select") return;
 
     const field = fields.find((item) => item.id === fieldId);
     const canvasWrap = canvasWrapRef.current;
@@ -224,20 +226,20 @@ export default function PdfCanvas({
       yPercent: pointerYPercent - field.yPercent,
     };
 
-    didDragRef.current = false;
+    didMoveRef.current = false;
     setDragFieldId(fieldId);
-    setSelectedFieldId(fieldId);
+    event.currentTarget.setPointerCapture(event.pointerId);
     setStatusMessage(`Movendo campo Q${field.questionNumber}...`);
   }
 
-  function handleDragMove(event: MouseEvent<HTMLDivElement>) {
-    if (!dragFieldId) return;
+  function handleCanvasPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!dragFieldId || activeTool !== "select") return;
 
     const rect = event.currentTarget.getBoundingClientRect();
     const pointerXPercent = ((event.clientX - rect.left) / rect.width) * 100;
     const pointerYPercent = ((event.clientY - rect.top) / rect.height) * 100;
 
-    didDragRef.current = true;
+    didMoveRef.current = true;
 
     updateFieldPosition(
       dragFieldId,
@@ -246,14 +248,13 @@ export default function PdfCanvas({
     );
   }
 
-  function handleDragEnd() {
+  function finishDragging() {
     if (!dragFieldId) return;
 
     const movedField = fields.find((field) => field.id === dragFieldId);
-
     setDragFieldId(null);
 
-    if (didDragRef.current && movedField) {
+    if (didMoveRef.current && movedField) {
       setStatusMessage(
         `Campo Q${movedField.questionNumber} movido. Clique em Salvar.`
       );
@@ -262,11 +263,17 @@ export default function PdfCanvas({
 
   function handleCanvasClick(event: MouseEvent<HTMLDivElement>) {
     if (
+      activeTool !== "text" ||
       !canvasSize.width ||
       !canvasSize.height ||
-      dragFieldId ||
-      activeTool === "select"
+      dragFieldId
     ) {
+      return;
+    }
+
+    const target = event.target as HTMLElement;
+
+    if (target.closest('[data-vee-field="true"]')) {
       return;
     }
 
@@ -279,52 +286,21 @@ export default function PdfCanvas({
         ? Math.max(...fields.map((field) => field.questionNumber)) + 1
         : 1;
 
-    const fieldSettings: Record<
-      Exclude<ToolMode, "select">,
-      {
-        fieldType: string;
-        widthPercent: number;
-        heightPercent: number;
-        label: string;
-      }
-    > = {
-      text: {
-        fieldType: "short_text",
-        widthPercent: 18,
-        heightPercent: 3.5,
-        label: "Texto",
-      },
-      choice: {
-        fieldType: "choice",
-        widthPercent: 4,
-        heightPercent: 3.5,
-        label: "Alternativa",
-      },
-      checkbox: {
-        fieldType: "checkbox",
-        widthPercent: 3.5,
-        heightPercent: 3.5,
-        label: "Checkbox",
-      },
-    };
-
-    const settings = fieldSettings[activeTool];
-
     const newField: FieldBoxData = {
       id: String(Date.now()),
       page: pageNumber,
       questionNumber: nextQuestionNumber,
-      fieldType: settings.fieldType,
+      fieldType: "short_text",
       xPercent: Number(xPercent.toFixed(3)),
       yPercent: Number(yPercent.toFixed(3)),
-      widthPercent: settings.widthPercent,
-      heightPercent: settings.heightPercent,
+      widthPercent: 12,
+      heightPercent: 2.8,
     };
 
     setFields((previous) => [...previous, newField]);
     setSelectedFieldId(newField.id);
     setStatusMessage(
-      `${settings.label} Q${nextQuestionNumber} criado. Clique em Salvar.`
+      `Campo de texto Q${nextQuestionNumber} criado. Clique em Salvar.`
     );
   }
 
@@ -544,10 +520,7 @@ export default function PdfCanvas({
       <div style={styles.toolInfo}>
         Ferramenta ativa:{" "}
         <strong>
-          {activeTool === "select" && "Selecionar"}
-          {activeTool === "text" && "Texto"}
-          {activeTool === "choice" && "Alternativa"}
-          {activeTool === "checkbox" && "Checkbox"}
+          {activeTool === "select" ? "Mover" : "Texto"}
         </strong>
       </div>
 
@@ -584,17 +557,18 @@ export default function PdfCanvas({
                 : "crosshair",
           }}
           onClick={handleCanvasClick}
-          onMouseMove={handleDragMove}
-          onMouseUp={handleDragEnd}
-          onMouseLeave={handleDragEnd}
+          onPointerMove={handleCanvasPointerMove}
+          onPointerUp={finishDragging}
+          onPointerCancel={finishDragging}
         >
           <canvas ref={canvasRef} style={styles.canvas} />
 
           <FieldLayer
             fields={visibleFields}
             selectedFieldId={selectedFieldId}
+            draggingFieldId={dragFieldId}
             onSelectField={handleSelectField}
-            onDragStart={handleDragStart}
+            onFieldPointerDown={handleFieldPointerDown}
           />
         </div>
       </div>

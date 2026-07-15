@@ -1,40 +1,43 @@
 "use client";
 
-import type { CSSProperties, MouseEvent } from "react";
+import type { CSSProperties, PointerEvent } from "react";
 import type { FieldBoxData } from "./FieldLayer";
 
-type FieldBoxProps = {
+type Props = {
   field: FieldBoxData;
   selected: boolean;
+  dragging: boolean;
   onSelect: (fieldId: string) => void;
-  onDragStart: (
+  onPointerDown: (
     fieldId: string,
-    event: React.MouseEvent<HTMLDivElement>
+    event: PointerEvent<HTMLDivElement>
   ) => void;
 };
 
 export default function FieldBox({
   field,
   selected,
+  dragging,
   onSelect,
-  onDragStart,
-}: FieldBoxProps) {
-  function handleClick(event: MouseEvent<HTMLDivElement>) {
-    event.stopPropagation();
-    onSelect(field.id);
-  }
-
+  onPointerDown,
+}: Props) {
   return (
-<div
-  onClick={handleClick}
-  onMouseDown={(e) => onDragStart(field.id, e)}
+    <div
+      data-vee-field="true"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onSelect(field.id);
+      }}
+      onPointerDown={(event) => onPointerDown(field.id, event)}
       style={{
-        ...styles.fieldBox,
-        ...(selected ? styles.selectedFieldBox : {}),
+        ...styles.box,
+        ...(selected ? styles.selected : {}),
         left: `${field.xPercent}%`,
         top: `${field.yPercent}%`,
         width: `${field.widthPercent}%`,
         height: `${field.heightPercent}%`,
+        cursor: dragging ? "grabbing" : "grab",
       }}
       title={`Q${field.questionNumber}`}
     >
@@ -44,11 +47,11 @@ export default function FieldBox({
 }
 
 const styles: Record<string, CSSProperties> = {
-  fieldBox: {
+  box: {
     position: "absolute",
     transform: "translate(-50%, -50%)",
     border: "2px solid #2563eb",
-    background: "rgba(37, 99, 235, 0.12)",
+    background: "rgba(37,99,235,.14)",
     color: "#1d4ed8",
     fontSize: "12px",
     fontWeight: 800,
@@ -57,13 +60,14 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "center",
     pointerEvents: "auto",
     borderRadius: "4px",
-    cursor: "pointer",
     userSelect: "none",
+    touchAction: "none",
+    boxSizing: "border-box",
   },
-  selectedFieldBox: {
+  selected: {
     border: "3px solid #1d4ed8",
-    background: "rgba(37, 99, 235, 0.24)",
-    boxShadow: "0 0 0 3px rgba(37, 99, 235, 0.25)",
+    background: "rgba(37,99,235,.24)",
+    boxShadow: "0 0 0 3px rgba(37,99,235,.25)",
     zIndex: 10,
   },
 };

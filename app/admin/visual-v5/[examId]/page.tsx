@@ -38,8 +38,7 @@ export default function VisualV5ExamPage() {
         setProject(data);
 
         if (data?.pdf_path) {
-          const signedUrl = await getVeePdfUrl(data.pdf_path);
-          setPdfUrl(signedUrl);
+          setPdfUrl(await getVeePdfUrl(data.pdf_path));
         }
       } catch (error: any) {
         setErrorMessage(error?.message || "Erro ao abrir projeto VEE.");
@@ -48,7 +47,7 @@ export default function VisualV5ExamPage() {
       }
     }
 
-    if (examId) loadProject();
+    if (examId) void loadProject();
   }, [examId]);
 
   async function handlePdfUpload(file: File | null) {
@@ -66,10 +65,9 @@ export default function VisualV5ExamPage() {
 
       const pdfPath = await uploadVeePdf(project.id, file);
       const updatedProject = await updateProjectPdf(project.id, pdfPath);
-      const signedUrl = await getVeePdfUrl(pdfPath);
 
       setProject(updatedProject);
-      setPdfUrl(signedUrl);
+      setPdfUrl(await getVeePdfUrl(pdfPath));
       setViewMode("pdf");
       setActiveTool("select");
       setMessage("PDF enviado com sucesso.");
@@ -79,16 +77,6 @@ export default function VisualV5ExamPage() {
     } finally {
       setUploading(false);
     }
-  }
-
-  function handleToolChange(tool: ToolMode) {
-    setActiveTool(tool);
-    setViewMode("pdf");
-  }
-
-  function handleToolbarSave() {
-    setViewMode("pdf");
-    setSaveRequest((current) => current + 1);
   }
 
   return (
@@ -103,25 +91,18 @@ export default function VisualV5ExamPage() {
         {loading && <p>Carregando projeto visual...</p>}
 
         {!loading && errorMessage && (
-          <p style={{ color: "#dc2626", fontWeight: 700 }}>{errorMessage}</p>
+          <p style={{ color: "#dc2626", fontWeight: 700 }}>
+            {errorMessage}
+          </p>
         )}
 
         {!loading && project && (
           <>
             <h2 style={{ marginTop: 0 }}>Projeto VEE aberto ✅</h2>
 
-            <p>
-              <strong>Project ID:</strong> {project.id}
-            </p>
-
-            <p>
-              <strong>Status:</strong> {project.status}
-            </p>
-
-            <p>
-              <strong>PDF:</strong>{" "}
-              {project.pdf_path || "Ainda não enviado"}
-            </p>
+            <p><strong>Project ID:</strong> {project.id}</p>
+            <p><strong>Status:</strong> {project.status}</p>
+            <p><strong>PDF:</strong> {project.pdf_path || "Ainda não enviado"}</p>
 
             <div style={uploadBox}>
               <h3>Enviar PDF original da prova</h3>
@@ -138,7 +119,9 @@ export default function VisualV5ExamPage() {
               {uploading && <p>Enviando...</p>}
 
               {message && (
-                <p style={{ color: "#166534", fontWeight: 700 }}>{message}</p>
+                <p style={{ color: "#166534", fontWeight: 700 }}>
+                  {message}
+                </p>
               )}
             </div>
 
@@ -148,28 +131,20 @@ export default function VisualV5ExamPage() {
                   viewMode={viewMode}
                   activeTool={activeTool}
                   onChangeViewMode={setViewMode}
-                  onChangeTool={handleToolChange}
-                  onSave={handleToolbarSave}
+                  onChangeTool={(tool) => {
+                    setActiveTool(tool);
+                    setViewMode("pdf");
+                  }}
+                  onSave={() => setSaveRequest((value) => value + 1)}
                 />
 
-                <div style={toolHelpBox}>
-                  {activeTool === "select" &&
-                    "Selecionar: clique em uma caixa para selecionar. Segure e arraste para mover."}
-                  {activeTool === "text" &&
-                    "Texto: clique no PDF para criar um campo em que o aluno poderá escrever."}
-                  {activeTool === "choice" &&
-                    "Alternativa: clique no PDF para criar um campo de alternativa."}
-                  {activeTool === "checkbox" &&
-                    "Checkbox: clique no PDF para criar um campo marcável."}
+                <div style={helpBox}>
+                  {activeTool === "select"
+                    ? "🖱 Mover: clique, segure e arraste uma caixa azul. Este modo nunca cria caixas."
+                    : "✏ Texto: clique na lacuna para criar um campo em que o aluno poderá escrever."}
                 </div>
 
                 <div style={previewBox}>
-                  <h3>
-                    {viewMode === "pdf"
-                      ? "Editor visual do PDF"
-                      : "Pré-visualização em modo compatibilidade"}
-                  </h3>
-
                   {viewMode === "pdf" ? (
                     <PdfCanvas
                       pdfUrl={pdfUrl}
@@ -202,7 +177,7 @@ const uploadBox: CSSProperties = {
   border: "1px dashed #93c5fd",
 };
 
-const toolHelpBox: CSSProperties = {
+const helpBox: CSSProperties = {
   marginTop: "12px",
   padding: "12px 14px",
   borderRadius: "12px",
@@ -212,9 +187,7 @@ const toolHelpBox: CSSProperties = {
   fontWeight: 700,
 };
 
-const previewBox: CSSProperties = {
-  marginTop: "24px",
-};
+const previewBox: CSSProperties = { marginTop: "24px" };
 
 const iframeStyle: CSSProperties = {
   width: "100%",

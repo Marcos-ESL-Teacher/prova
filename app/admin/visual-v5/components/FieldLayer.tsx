@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, PointerEvent } from "react";
 import FieldBox from "./FieldBox";
 
 export type FieldBoxData = {
@@ -15,42 +15,40 @@ export type FieldBoxData = {
   heightPercent: number;
 };
 
-type FieldLayerProps = {
+type Props = {
   fields: FieldBoxData[];
   selectedFieldId: string | null;
+  draggingFieldId: string | null;
   onSelectField: (fieldId: string) => void;
-
-  onDragStart: (
+  onFieldPointerDown: (
     fieldId: string,
-    event: React.MouseEvent<HTMLDivElement>
+    event: PointerEvent<HTMLDivElement>
   ) => void;
 };
 
 export default function FieldLayer({
   fields,
   selectedFieldId,
+  draggingFieldId,
   onSelectField,
-  onDragStart,
-}: FieldLayerProps) {
+  onFieldPointerDown,
+}: Props) {
   return (
     <div style={styles.layer}>
       {fields.map((field) => (
-<FieldBox
-  key={field.id}
-  field={field}
-  selected={field.id === selectedFieldId}
-  onSelect={onSelectField}
-  onDragStart={onDragStart}
-/>
+        <FieldBox
+          key={field.id}
+          field={field}
+          selected={field.id === selectedFieldId}
+          dragging={field.id === draggingFieldId}
+          onSelect={onSelectField}
+          onPointerDown={onFieldPointerDown}
+        />
       ))}
     </div>
   );
 }
 
 const styles: Record<string, CSSProperties> = {
-  layer: {
-    position: "absolute",
-    inset: 0,
-    pointerEvents: "none",
-  },
+  layer: { position: "absolute", inset: 0, pointerEvents: "none" },
 };
