@@ -52,6 +52,8 @@ export default function StudentExamBlocksPage() {
   const visualPdfSurfaceRef = useRef<HTMLDivElement | null>(null);
   const visualPaperRef = useRef<HTMLDivElement | null>(null);
   const renderRequestRef = useRef(0);
+  const visualPdfDocumentRef = useRef<any>(null);
+  const visualRenderTaskRef = useRef<any>(null);
   const [studentName, setStudentName] = useState("");
   const [studentPhone, setStudentPhone] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -70,32 +72,19 @@ export default function StudentExamBlocksPage() {
 
     let cancelled = false;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    const retryTimers: Array<ReturnType<typeof setTimeout>> = [];
 
-    const requestRender = (delay: number) => {
-      const timer = setTimeout(() => {
-        if (!cancelled) void renderVisualPdfPage();
-      }, delay);
-
-      retryTimers.push(timer);
-    };
-
-    // A primeira renderização pode acontecer antes de o cartão terminar
-    // de assumir a largura definitiva no Vercel. Fazemos tentativas curtas
-    // após o layout estabilizar.
-    requestRender(0);
-    requestRender(150);
-    requestRender(450);
+    const initialTimer = setTimeout(() => {
+      if (!cancelled) void renderVisualPdfPage();
+    }, 250);
 
     const paper = visualPaperRef.current;
     const observer =
       typeof ResizeObserver !== "undefined" && paper
         ? new ResizeObserver(() => {
             if (resizeTimer) clearTimeout(resizeTimer);
-
             resizeTimer = setTimeout(() => {
               if (!cancelled) void renderVisualPdfPage();
-            }, 100);
+            }, 160);
           })
         : null;
 
@@ -103,20 +92,17 @@ export default function StudentExamBlocksPage() {
 
     const handleResize = () => {
       if (resizeTimer) clearTimeout(resizeTimer);
-
       resizeTimer = setTimeout(() => {
         if (!cancelled) void renderVisualPdfPage();
-      }, 140);
+      }, 180);
     };
 
     window.addEventListener("resize", handleResize);
 
     return () => {
       cancelled = true;
-
-      retryTimers.forEach((timer) => clearTimeout(timer));
+      clearTimeout(initialTimer);
       if (resizeTimer) clearTimeout(resizeTimer);
-
       observer?.disconnect();
       window.removeEventListener("resize", handleResize);
     };
@@ -142,19 +128,23 @@ export default function StudentExamBlocksPage() {
         import.meta.url
       ).toString();
 
-      const pdf = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
+      if (!visualPdfDocumentRef.current) {
+        visualPdfDocumentRef.current = await pdfjsLib.getDocument({
+          url: pdfUrl,
+        }).promise;
+      }
+
+      const pdf = visualPdfDocumentRef.current;
       const pageNumber = Math.min(Math.max(1, Number(visualCurrentPage || 1)), Number(pdf.numPages || 1));
       const page = await pdf.getPage(pageNumber);
       const baseViewport = page.getViewport({ scale: 1 });
 
-      const paperWidth =
-        visualPaperRef.current?.clientWidth ||
-        visualPdfSurfaceRef.current?.parentElement?.clientWidth ||
-        window.innerWidth * 0.82;
+      const paperWidth = visualPaperRef.current?.clientWidth || 0;
+      const browserWidth = Math.max(620, window.innerWidth - 160);
 
       const availableWidth = Math.min(
         900,
-        Math.max(320, paperWidth - 30)
+        paperWidth > 500 ? paperWidth - 30 : browserWidth
       );
 
       const scale = availableWidth / baseViewport.width;
@@ -172,7 +162,22 @@ export default function StudentExamBlocksPage() {
       canvas.style.height = `${viewport.height}px`;
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       context.clearRect(0, 0, viewport.width, viewport.height);
-      await page.render({ canvasContext: context, viewport }).promise;
+      if (visualRenderTaskRef.current) {
+        try {
+          visualRenderTaskRef.current.cancel();
+        } catch {
+          // A tarefa anterior pode já ter terminado.
+        }
+      }
+
+      const renderTask = page.render({ canvasContext: context, viewport });
+      visualRenderTaskRef.current = renderTask;
+
+      await renderTask.promise;
+
+      if (requestId === renderRequestRef.current) {
+        visualRenderTaskRef.current = null;
+      }
     } catch (error) {
       console.log("Erro ao renderizar PDF no aluno:", error);
     }
@@ -337,6 +342,8 @@ export default function StudentExamBlocksPage() {
   }
 
   async function loadPdf(pdfStoragePathOrUrl: string) {
+    visualPdfDocumentRef.current = null;
+
     if (!pdfStoragePathOrUrl) {
       setPdfUrl("");
       setVisualCurrentPage(1);
@@ -1513,7 +1520,8 @@ const styles: any = {
 
   visualPdfSurface: {
     position: "relative",
-    width: "fit-content",
+    width: "100%",
+    maxWidth: "900px",
     minHeight: "1px",
     margin: "0 auto",
     background: "#fff",
@@ -1525,6 +1533,8 @@ const styles: any = {
     position: "relative",
     zIndex: 1,
     display: "block",
+    width: "100%",
+    height: "auto",
     background: "#fff",
     pointerEvents: "none",
   },
