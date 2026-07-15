@@ -133,9 +133,11 @@ export default function StudentExamBlocksPage() {
 
     setExam(examData);
 
-    const pdfValue = examData?.pdf_url || examData?.pdf_storage_path || "";
-    if (pdfValue) {
-      await loadPdf(pdfValue);
+    const legacyPdfValue =
+      examData?.pdf_url || examData?.pdf_storage_path || "";
+
+    if (legacyPdfValue) {
+      await loadPdf(legacyPdfValue);
     }
 
     const { data: blocksData, error: blocksError } = await supabase
@@ -163,19 +165,45 @@ export default function StudentExamBlocksPage() {
       examData?.project_id ||
       "";
 
-    if (!veeProjectId) {
+    let veeProjectPdfPath = "";
+
+    if (veeProjectId) {
       const { data: projectRows, error: projectError } = await supabase
         .from("vee_projects")
-        .select("id")
+        .select("id, pdf_path")
+        .eq("id", veeProjectId)
+        .limit(1);
+
+      if (projectError) {
+        console.log(
+          "Não foi possível carregar o projeto VEE vinculado:",
+          projectError.message
+        );
+      } else if (Array.isArray(projectRows) && projectRows.length > 0) {
+        veeProjectId = String(projectRows[0].id);
+        veeProjectPdfPath = String(projectRows[0].pdf_path || "");
+      }
+    } else {
+      const { data: projectRows, error: projectError } = await supabase
+        .from("vee_projects")
+        .select("id, pdf_path")
         .eq("exam_id", examId)
         .order("updated_at", { ascending: false })
         .limit(1);
 
       if (projectError) {
-        console.log("Não foi possível localizar o projeto VEE:", projectError.message);
+        console.log(
+          "Não foi possível localizar o projeto VEE:",
+          projectError.message
+        );
       } else if (Array.isArray(projectRows) && projectRows.length > 0) {
         veeProjectId = String(projectRows[0].id);
+        veeProjectPdfPath = String(projectRows[0].pdf_path || "");
       }
+    }
+
+    if (!legacyPdfValue && veeProjectPdfPath) {
+      await loadPdf(veeProjectPdfPath);
     }
 
     if (veeProjectId) {
@@ -712,7 +740,7 @@ function renderVisualFieldV5(field: VisualField) {
 
     return (
       <div style={styles.visualExamBox}>
-        <h2 style={styles.digitalExamTitle}>Prova Visual V4.1 Estável — sem caixas sobre o PDF</h2>
+        <h2 style={styles.digitalExamTitle}>Prova Visual VEE — responda diretamente no PDF</h2>
 
         {!pdfUrl && (
           <div style={styles.warningBox}>
@@ -778,7 +806,7 @@ function renderVisualFieldV5(field: VisualField) {
         <div style={styles.stableAnswerBox}>
           <h2 style={styles.digitalExamTitle}>Respostas</h2>
           <p style={styles.helpText}>
-            Veja o PDF/imagem acima e responda cada questão nos campos abaixo.
+            Responda diretamente nos campos sobre o PDF. A lista abaixo serve como apoio.
           </p>
 
           {groupedQuestions.length === 0 && (
