@@ -44,6 +44,10 @@ type VeeField = {
   question_number: number;
   field_type: string;
   answer_value?: string | null;
+  x?: number | null;
+  y?: number | null;
+  width?: number | null;
+  height?: number | null;
   points?: number | null;
   sort_order?: number | null;
   metadata?: {
@@ -63,6 +67,7 @@ export default function SubmissionDetailPage() {
   const [blocks, setBlocks] = useState<ExamBlock[]>([]);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [veeFields, setVeeFields] = useState<VeeField[]>([]);
+  const [veePdfUrl, setVeePdfUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [resultado, setResultado] = useState<any>(null);
   const [mode, setMode] = useState<"blocks" | "questions" | "vee">("questions");
@@ -193,6 +198,32 @@ export default function SubmissionDetailPage() {
     };
   }
 
+  async function resolveVeePdfUrl(pdfPathOrUrl: string) {
+    if (!pdfPathOrUrl) return "";
+
+    if (
+      pdfPathOrUrl.startsWith("http://") ||
+      pdfPathOrUrl.startsWith("https://")
+    ) {
+      return pdfPathOrUrl;
+    }
+
+    const cleanPath = pdfPathOrUrl
+      .replace(/^\/+/, "")
+      .replace(/^exam-pdfs\//, "");
+
+    const { data, error } = await supabase.storage
+      .from("exam-pdfs")
+      .createSignedUrl(cleanPath, 60 * 60 * 4);
+
+    if (error) {
+      console.log("Erro ao carregar PDF do VEE:", error.message);
+      return "";
+    }
+
+    return data.signedUrl;
+  }
+
   async function carregarDados() {
     setLoading(true);
 
@@ -236,17 +267,35 @@ export default function SubmissionDetailPage() {
         examData?.project_id ||
         "";
 
-      if (!veeProjectId) {
+      let veeProjectPdfPath = "";
+
+      if (veeProjectId) {
         const { data: projectRows } = await supabase
           .from("vee_projects")
-          .select("id")
+          .select("id, pdf_path")
+          .eq("id", veeProjectId)
+          .limit(1);
+
+        if (Array.isArray(projectRows) && projectRows.length > 0) {
+          veeProjectId = String(projectRows[0].id);
+          veeProjectPdfPath = String(projectRows[0].pdf_path || "");
+        }
+      } else {
+        const { data: projectRows } = await supabase
+          .from("vee_projects")
+          .select("id, pdf_path")
           .eq("exam_id", submissionData.exam_id)
           .order("updated_at", { ascending: false })
           .limit(1);
 
         if (Array.isArray(projectRows) && projectRows.length > 0) {
           veeProjectId = String(projectRows[0].id);
+          veeProjectPdfPath = String(projectRows[0].pdf_path || "");
         }
+      }
+
+      if (veeProjectPdfPath) {
+        setVeePdfUrl(await resolveVeePdfUrl(veeProjectPdfPath));
       }
 
       if (veeProjectId) {
@@ -456,8 +505,252 @@ export default function SubmissionDetailPage() {
     return y + lines.length * lineHeight;
   }
 
+  async function gerarPdfVisualCorrigido() {
+    if (!submission || !veePdfUrl) {
+      alert("O PDF original do VEE não foi encontrado.");
+      return;
+    }
+
+    try {
+      const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/legacy/build/pdf.worker.mjs",
+        import.meta.url
+      ).toString();
+
+      const sourcePdf = await pdfjsLib.getDocument({
+        url: veePdfUrl,
+      }).promise;
+
+      let output: jsPDF | null = null;
+
+      for (let pageNumber = 1; pageNumber <= sourcePdf.numPages; pageNumber++) {
+        const page = await sourcePdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 2 });
+
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+
+        if (!context) continue;
+
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+
+        await page.render({
+          canvasContext: context,
+          viewport,
+        }).promise;
+
+        const imageData = canvas.toDataURL("image/jpeg", 0.94);
+        const portrait = viewport.height >= viewport.width;
+
+        const pageWidthMm = portrait ? 210 : 297;
+        const pageHeightMm = portrait ? 297 : 210;
+
+        if (!output) {
+          output = new jsPDF({
+            orientation: portrait ? "portrait" : "landscape",
+            unit: "mm",
+            format: [pageWidthMm, pageHeightMm],
+          });
+        } else {
+          output.addPage(
+            [pageWidthMm, pageHeightMm],
+            portrait ? "portrait" : "landscape"
+          );
+        }
+
+        output.addImage(
+          imageData,
+          "JPEG",
+          0,
+          0,
+          pageWidthMm,
+          pageHeightMm
+        );
+
+        const pageFields = veeFields.filter(
+          (field) => Number(field.metadata?.page || 1) === pageNumber
+        );
+
+        const groupedOnPage: Record<string, VeeField[]> = {};
+
+        pageFields.forEach((field) => {
+          const key = String(field.question_number || 1);
+          if (!groupedOnPage[key]) groupedOnPage[key] = [];
+          groupedOnPage[key].push(field);
+        });
+
+        Object.entries(groupedOnPage).forEach(
+          ([questionNumber, fields]) => {
+            const correction = getVeeQuestionCorrection(
+              questionNumber,
+              fields
+            );
+
+            const textField =
+              fields.find(
+                (field) =>
+                  field.field_type !== "choice" &&
+                  field.field_type !== "checkbox"
+              ) || fields[0];
+
+            if (!textField) return;
+
+            if (
+              correction.type !== "choice" &&
+              correction.type !== "checkbox"
+            ) {
+              const x =
+                (Number(textField.x || 0) / 100) * pageWidthMm;
+              const y =
+                (Number(textField.y || 0) / 100) * pageHeightMm;
+              const width =
+                (Number(textField.width || 10) / 100) * pageWidthMm;
+
+              output!.setFont("helvetica", "bold");
+              output!.setFontSize(10);
+              output!.setTextColor(30, 64, 175);
+              output!.text(
+                String(correction.studentAnswer || ""),
+                x,
+                y + 1,
+                {
+                  align: "center",
+                  maxWidth: Math.max(12, width),
+                }
+              );
+
+              if (correction.correct) {
+                output!.setTextColor(22, 163, 74);
+                output!.setFontSize(13);
+                output!.text(
+                  "C",
+                  Math.min(pageWidthMm - 4, x + width / 2 + 3),
+                  y + 1
+                );
+              } else {
+                output!.setTextColor(220, 38, 38);
+                output!.setFontSize(13);
+                output!.text(
+                  "X",
+                  Math.min(pageWidthMm - 4, x + width / 2 + 3),
+                  y + 1
+                );
+
+                output!.setFont("helvetica", "bold");
+                output!.setFontSize(8);
+                output!.setTextColor(22, 163, 74);
+                output!.text(
+                  `Correct: ${String(correction.correctAnswer || "")}`,
+                  x,
+                  Math.min(pageHeightMm - 4, y + 5),
+                  {
+                    align: "center",
+                    maxWidth: Math.max(18, width * 1.8),
+                  }
+                );
+              }
+
+              return;
+            }
+
+            fields.forEach((field) => {
+              const value = String(field.answer_value || "");
+              const x = (Number(field.x || 0) / 100) * pageWidthMm;
+              const y = (Number(field.y || 0) / 100) * pageHeightMm;
+              const selectedValues = String(
+                correction.studentAnswer || ""
+              )
+                .split(",")
+                .map((item) => item.trim().toLowerCase());
+
+              const studentSelected = selectedValues.includes(
+                value.trim().toLowerCase()
+              );
+              const isCorrectOption = Boolean(
+                field.metadata?.correct_answer
+              );
+
+              if (studentSelected) {
+                output!.setDrawColor(
+                  isCorrectOption ? 22 : 220,
+                  isCorrectOption ? 163 : 38,
+                  isCorrectOption ? 74 : 38
+                );
+                output!.setLineWidth(0.8);
+                output!.circle(x, y, 3.3, "S");
+              }
+
+              if (isCorrectOption && !studentSelected) {
+                output!.setDrawColor(22, 163, 74);
+                output!.setLineWidth(0.8);
+                output!.circle(x, y, 3.8, "S");
+
+                output!.setFont("helvetica", "bold");
+                output!.setFontSize(7);
+                output!.setTextColor(22, 163, 74);
+                output!.text("Correct", x + 5, y + 1);
+              }
+            });
+          }
+        );
+
+        output.setFillColor(255, 255, 255);
+        output.roundedRect(
+          8,
+          pageHeightMm - 13,
+          pageWidthMm - 16,
+          8,
+          2,
+          2,
+          "F"
+        );
+
+        const result = calcularResultado();
+
+        output.setFont("helvetica", "bold");
+        output.setFontSize(8);
+        output.setTextColor(17, 24, 39);
+        output.text(
+          `Student: ${submission.student_name || ""}   |   Correct: ${
+            result.acertos
+          }/${result.total}   |   Result: ${result.nota}%`,
+          12,
+          pageHeightMm - 8
+        );
+      }
+
+      if (!output) {
+        alert("Não foi possível gerar o PDF corrigido.");
+        return;
+      }
+
+      const safeName = (submission.student_name || "student")
+        .replace(/\s+/g, "_")
+        .replace(/[^\w-]/g, "");
+
+      output.save(
+        `corrected_original_exam_${safeName}_${
+          submission.protocol || submissionId
+        }.pdf`
+      );
+    } catch (error: any) {
+      alert(
+        "Erro ao gerar o PDF original corrigido: " +
+          (error?.message || String(error))
+      );
+    }
+  }
+
   async function gerarPDF() {
     if (!submission) return alert("Dados da prova não carregados.");
+
+    if (mode === "vee" && veePdfUrl) {
+      await gerarPdfVisualCorrigido();
+      return;
+    }
 
     const resultadoFinal = calcularResultado();
 
@@ -978,7 +1271,7 @@ export default function SubmissionDetailPage() {
       </button>
 
       <button onClick={gerarPDF} style={styles.pdfButton}>
-        📄 Gerar Prova Corrigida PDF
+        📄 Gerar PDF Original Corrigido
       </button>
 
       <button onClick={excluirProva} style={styles.deleteButton}>
