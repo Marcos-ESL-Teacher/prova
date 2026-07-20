@@ -38,6 +38,21 @@ type ExamQuestion = {
   correct_answer?: string | null;
 };
 
+type VeeField = {
+  id: string;
+  project_id: string;
+  question_number: number;
+  field_type: string;
+  answer_value?: string | null;
+  points?: number | null;
+  sort_order?: number | null;
+  metadata?: {
+    page?: number;
+    correct_answer?: boolean;
+    [key: string]: any;
+  } | null;
+};
+
 export default function SubmissionDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -47,9 +62,10 @@ export default function SubmissionDetailPage() {
   const [exam, setExam] = useState<any>(null);
   const [blocks, setBlocks] = useState<ExamBlock[]>([]);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
+  const [veeFields, setVeeFields] = useState<VeeField[]>([]);
   const [loading, setLoading] = useState(true);
   const [resultado, setResultado] = useState<any>(null);
-  const [mode, setMode] = useState<"blocks" | "questions">("questions");
+  const [mode, setMode] = useState<"blocks" | "questions" | "vee">("questions");
 
   useEffect(() => {
     carregarDados();
@@ -80,6 +96,101 @@ export default function SubmissionDetailPage() {
 
   function getQuestionBlocks() {
     return blocks.filter((block) => block.block_type === "question");
+  }
+
+  function normalizeAnswerSet(value: any) {
+    return String(value || "")
+      .split(",")
+      .map((item) => normalizeAnswer(item))
+      .filter(Boolean)
+      .sort();
+  }
+
+  function sameAnswerSet(a: any, b: any) {
+    const left = normalizeAnswerSet(a);
+    const right = normalizeAnswerSet(b);
+
+    return (
+      left.length === right.length &&
+      left.every((value, index) => value === right[index])
+    );
+  }
+
+  function getGroupedVeeQuestions() {
+    const grouped: Record<string, VeeField[]> = {};
+
+    veeFields.forEach((field) => {
+      const key = String(field.question_number || 1);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(field);
+    });
+
+    return Object.entries(grouped).sort(
+      (a, b) => Number(a[0]) - Number(b[0])
+    );
+  }
+
+  function getVeeQuestionCorrection(
+    questionNumber: string,
+    fields: VeeField[]
+  ) {
+    const answerKey = `visual_q_${questionNumber}`;
+    const studentAnswer = submission?.answers?.[answerKey] || "";
+
+    const checkboxFields = fields.filter(
+      (field) => field.field_type === "checkbox"
+    );
+    const choiceFields = fields.filter(
+      (field) => field.field_type === "choice"
+    );
+
+    if (checkboxFields.length > 0) {
+      const correctValues = checkboxFields
+        .filter((field) => Boolean(field.metadata?.correct_answer))
+        .map((field) => String(field.answer_value || ""))
+        .filter(Boolean);
+
+      const correctAnswer = correctValues.join(",");
+
+      return {
+        studentAnswer,
+        correctAnswer,
+        correct: sameAnswerSet(studentAnswer, correctAnswer),
+        type: "checkbox",
+      };
+    }
+
+    if (choiceFields.length > 0) {
+      const correctField =
+        choiceFields.find((field) =>
+          Boolean(field.metadata?.correct_answer)
+        ) || choiceFields[0];
+
+      const correctAnswer = String(correctField?.answer_value || "");
+
+      return {
+        studentAnswer,
+        correctAnswer,
+        correct:
+          normalizeAnswer(studentAnswer) === normalizeAnswer(correctAnswer),
+        type: "choice",
+      };
+    }
+
+    const textField =
+      fields.find((field) =>
+        Boolean(field.metadata?.correct_answer)
+      ) || fields[0];
+
+    const correctAnswer = String(textField?.answer_value || "");
+
+    return {
+      studentAnswer,
+      correctAnswer,
+      correct:
+        normalizeAnswer(studentAnswer) === normalizeAnswer(correctAnswer),
+      type: textField?.field_type || "short_text",
+    };
   }
 
   async function carregarDados() {
@@ -118,6 +229,46 @@ export default function SubmissionDetailPage() {
         .single();
 
       setExam(examData || null);
+
+      let veeProjectId =
+        examData?.vee_project_id ||
+        examData?.visual_project_id ||
+        examData?.project_id ||
+        "";
+
+      if (!veeProjectId) {
+        const { data: projectRows } = await supabase
+          .from("vee_projects")
+          .select("id")
+          .eq("exam_id", submissionData.exam_id)
+          .order("updated_at", { ascending: false })
+          .limit(1);
+
+        if (Array.isArray(projectRows) && projectRows.length > 0) {
+          veeProjectId = String(projectRows[0].id);
+        }
+      }
+
+      if (veeProjectId) {
+        const { data: veeFieldsData, error: veeFieldsError } = await supabase
+          .from("vee_fields")
+          .select("*")
+          .eq("project_id", veeProjectId)
+          .eq("is_deleted", false)
+          .order("question_number", { ascending: true })
+          .order("sort_order", { ascending: true });
+
+        if (
+          !veeFieldsError &&
+          Array.isArray(veeFieldsData) &&
+          veeFieldsData.length > 0
+        ) {
+          setVeeFields(veeFieldsData as VeeField[]);
+          setMode("vee");
+          setLoading(false);
+          return;
+        }
+      }
 
       const { data: blocksData, error: blocksError } = await supabase
         .from("exam_blocks")
@@ -164,7 +315,18 @@ export default function SubmissionDetailPage() {
     let total = 0;
     let acertos = 0;
 
-    if (mode === "blocks") {
+    if (mode === "vee") {
+      getGroupedVeeQuestions().forEach(([questionNumber, fields]) => {
+        total++;
+
+        const correction = getVeeQuestionCorrection(
+          questionNumber,
+          fields
+        );
+
+        if (correction.correct) acertos++;
+      });
+    } else if (mode === "blocks") {
       getQuestionBlocks().forEach((block) => {
         total++;
 
@@ -345,7 +507,57 @@ export default function SubmissionDetailPage() {
     doc.line(14, y, 196, y);
     y += 10;
 
-    if (mode === "blocks") {
+    if (mode === "vee") {
+      getGroupedVeeQuestions().forEach(([questionNumber, fields]) => {
+        y = addNewPageIfNeeded(doc, y, 34);
+
+        const correction = getVeeQuestionCorrection(
+          questionNumber,
+          fields
+        );
+
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Question ${questionNumber}`, 14, y);
+        y += 7;
+
+        doc.setFontSize(10);
+        doc.setTextColor(
+          correction.correct ? 22 : 220,
+          correction.correct ? 163 : 38,
+          correction.correct ? 74 : 38
+        );
+
+        y = writeWrappedText(
+          doc,
+          `${correction.correct ? "✓" : "✗"} Student Answer: ${
+            String(correction.studentAnswer || "Blank")
+          }`,
+          18,
+          y,
+          160,
+          5
+        );
+
+        doc.setTextColor(22, 163, 74);
+        y = writeWrappedText(
+          doc,
+          `Correct Answer: ${String(
+            correction.correctAnswer || "Not registered"
+          )}`,
+          18,
+          y + 1,
+          160,
+          5
+        );
+
+        y += 4;
+        doc.setTextColor(0, 0, 0);
+        doc.setLineWidth(0.2);
+        doc.line(14, y, 196, y);
+        y += 8;
+      });
+    } else if (mode === "blocks") {
       blocks.forEach((block) => {
         y = addNewPageIfNeeded(doc, y, 22);
 
@@ -753,7 +965,11 @@ export default function SubmissionDetailPage() {
         </p>
         <p>
           <strong>Modo:</strong>{" "}
-          {mode === "blocks" ? "Prova digital completa (exam_blocks)" : "Questões antigas (exam_questions)"}
+          {mode === "vee"
+            ? "Prova Visual VEE (vee_fields)"
+            : mode === "blocks"
+              ? "Prova digital completa (exam_blocks)"
+              : "Questões antigas (exam_questions)"}
         </p>
       </div>
 
@@ -784,6 +1000,54 @@ export default function SubmissionDetailPage() {
           <p>
             <strong>Result:</strong> {resultado.nota}%
           </p>
+        </div>
+      )}
+
+      {mode === "vee" && (
+        <div>
+          {getGroupedVeeQuestions().map(([questionNumber, fields]) => {
+            const correction = getVeeQuestionCorrection(
+              questionNumber,
+              fields
+            );
+
+            return (
+              <div
+                key={questionNumber}
+                style={{
+                  ...styles.questionCard,
+                  borderLeft: correction.correct
+                    ? "8px solid #16a34a"
+                    : "8px solid #dc2626",
+                }}
+              >
+                <h3>Questão {questionNumber}</h3>
+
+                <p>
+                  <strong>Tipo:</strong> {correction.type}
+                </p>
+
+                <p>
+                  <strong>Resposta do aluno:</strong>{" "}
+                  {getAnswerLabel(correction.studentAnswer) || "Em branco"}
+                </p>
+
+                <p>
+                  <strong>Resposta correta:</strong>{" "}
+                  {getAnswerLabel(correction.correctAnswer) || "Não cadastrada"}
+                </p>
+
+                <p
+                  style={{
+                    color: correction.correct ? "#16a34a" : "#dc2626",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {correction.correct ? "✓ Correta" : "✗ Incorreta"}
+                </p>
+              </div>
+            );
+          })}
         </div>
       )}
 
