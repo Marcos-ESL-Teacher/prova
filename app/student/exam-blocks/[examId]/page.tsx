@@ -698,7 +698,7 @@ function renderVisualFieldV5(field: VisualField) {
       key={field.id}
       type="text"
       aria-label={`Resposta da questão ${field.question_number}`}
-      placeholder="Digite aqui"
+      placeholder=""
       value={answers[questionKey] || ""}
       onChange={(e) =>
         updateAnswer(questionKey, e.target.value)
@@ -1510,15 +1510,17 @@ const styles: any = {
   },
 
   visualTextInput: {
-    padding: "0 6px 1px",
+    padding: "0 3px",
     fontSize: "16px",
     textAlign: "center",
-    background: "rgba(255,255,255,0.72)",
+    color: "#111827",
+    caretColor: "#111827",
+    background: "transparent",
     border: "none",
-    borderBottom: "2px solid #2563eb",
     borderRadius: "0",
     height: "100%",
     boxShadow: "none",
+    outline: "none",
   },
 
   visualEssayInput: {
