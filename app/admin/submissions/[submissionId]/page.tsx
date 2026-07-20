@@ -505,6 +505,21 @@ export default function SubmissionDetailPage() {
     return y + lines.length * lineHeight;
   }
 
+  async function getTeacherStampBase64() {
+    const possibleStampPaths = [
+      "/teacher_stamp.jpg",
+      "/teacher_stamp.jpeg",
+      "/teacher_stamp.png",
+    ];
+
+    for (const stampPath of possibleStampPaths) {
+      const base64 = await imageToBase64(stampPath);
+      if (base64) return base64;
+    }
+
+    return null;
+  }
+
   async function gerarPdfVisualCorrigido() {
     if (!submission || !veePdfUrl) {
       alert("O PDF original do VEE não foi encontrado.");
@@ -512,6 +527,8 @@ export default function SubmissionDetailPage() {
     }
 
     try {
+      const teacherStampBase64 = await getTeacherStampBase64();
+
       const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
       pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -569,6 +586,55 @@ export default function SubmissionDetailPage() {
           pageWidthMm,
           pageHeightMm
         );
+
+        if (pageNumber === 1) {
+          const summary = calcularResultado();
+
+          if (teacherStampBase64) {
+            const stampWidth = 54;
+            const stampHeight = 36;
+            const stampX = pageWidthMm - stampWidth - 8;
+            const stampY = 6;
+
+            output.addImage(
+              teacherStampBase64,
+              teacherStampBase64.toLowerCase().includes("image/png")
+                ? "PNG"
+                : "JPEG",
+              stampX,
+              stampY,
+              stampWidth,
+              stampHeight
+            );
+          }
+
+          const boxWidth = 55;
+          const boxHeight = 24;
+          const boxX = pageWidthMm - boxWidth - 8;
+          const boxY = teacherStampBase64 ? 44 : 8;
+
+          output.setFillColor(255, 255, 255);
+          output.setDrawColor(148, 163, 184);
+          output.setLineWidth(0.35);
+          output.roundedRect(
+            boxX,
+            boxY,
+            boxWidth,
+            boxHeight,
+            2,
+            2,
+            "FD"
+          );
+
+          output.setFont("helvetica", "bold");
+          output.setFontSize(7.5);
+          output.setTextColor(17, 24, 39);
+
+          output.text(`Total: ${summary.total}`, boxX + 4, boxY + 6);
+          output.text(`Correct: ${summary.acertos}`, boxX + 4, boxY + 11);
+          output.text(`Incorrect: ${summary.erros}`, boxX + 4, boxY + 16);
+          output.text(`Score: ${summary.nota}%`, boxX + 4, boxY + 21);
+        }
 
         const pageFields = veeFields.filter(
           (field) => Number(field.metadata?.page || 1) === pageNumber
@@ -714,9 +780,11 @@ export default function SubmissionDetailPage() {
         output.setFontSize(8);
         output.setTextColor(17, 24, 39);
         output.text(
-          `Student: ${submission.student_name || ""}   |   Correct: ${
-            result.acertos
-          }/${result.total}   |   Result: ${result.nota}%`,
+          `Student: ${submission.student_name || ""}   |   Total: ${
+            result.total
+          }   |   Correct: ${result.acertos}   |   Incorrect: ${
+            result.erros
+          }   |   Score: ${result.nota}%`,
           12,
           pageHeightMm - 8
         );
