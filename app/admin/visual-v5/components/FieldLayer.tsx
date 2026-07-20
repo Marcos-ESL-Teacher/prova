@@ -21,8 +21,14 @@ type Props = {
   fields: FieldBoxData[];
   selectedFieldId: string | null;
   draggingFieldId: string | null;
+  resizingFieldId: string | null;
+  resizeEnabled: boolean;
   onSelectField: (fieldId: string) => void;
   onFieldPointerDown: (
+    fieldId: string,
+    event: PointerEvent<HTMLDivElement>
+  ) => void;
+  onResizePointerDown: (
     fieldId: string,
     event: PointerEvent<HTMLDivElement>
   ) => void;
@@ -32,8 +38,11 @@ export default function FieldLayer({
   fields,
   selectedFieldId,
   draggingFieldId,
+  resizingFieldId,
+  resizeEnabled,
   onSelectField,
   onFieldPointerDown,
+  onResizePointerDown,
 }: Props) {
   return (
     <div style={styles.layer}>
@@ -43,8 +52,11 @@ export default function FieldLayer({
           field={field}
           selected={field.id === selectedFieldId}
           dragging={field.id === draggingFieldId}
+          resizing={field.id === resizingFieldId}
+          resizeEnabled={resizeEnabled}
           onSelect={onSelectField}
           onPointerDown={onFieldPointerDown}
+          onResizePointerDown={onResizePointerDown}
         />
       ))}
     </div>

@@ -7,8 +7,14 @@ type Props = {
   field: FieldBoxData;
   selected: boolean;
   dragging: boolean;
+  resizing: boolean;
+  resizeEnabled: boolean;
   onSelect: (fieldId: string) => void;
   onPointerDown: (
+    fieldId: string,
+    event: PointerEvent<HTMLDivElement>
+  ) => void;
+  onResizePointerDown: (
     fieldId: string,
     event: PointerEvent<HTMLDivElement>
   ) => void;
@@ -18,8 +24,11 @@ export default function FieldBox({
   field,
   selected,
   dragging,
+  resizing,
+  resizeEnabled,
   onSelect,
   onPointerDown,
+  onResizePointerDown,
 }: Props) {
   const typeLabel =
     field.fieldType === "choice"
@@ -31,6 +40,7 @@ export default function FieldBox({
   return (
     <div
       data-vee-field="true"
+      data-field-id={field.id}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -44,13 +54,31 @@ export default function FieldBox({
         top: `${field.yPercent}%`,
         width: `${field.widthPercent}%`,
         height: `${field.heightPercent}%`,
-        cursor: dragging ? "grabbing" : "grab",
+        cursor: dragging
+          ? "grabbing"
+          : resizing
+            ? "nwse-resize"
+            : "grab",
       }}
       title={`Q${field.questionNumber} — ${field.fieldType}${
         field.isCorrect ? " — correta" : ""
       }`}
     >
       {typeLabel}
+
+      {selected && resizeEnabled && (
+        <div
+          data-vee-resize-handle="true"
+          aria-label="Redimensionar campo"
+          title="Arraste para aumentar ou diminuir"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onResizePointerDown(field.id, event);
+          }}
+          style={styles.resizeHandle}
+        />
+      )}
     </div>
   );
 }
@@ -78,5 +106,19 @@ const styles: Record<string, CSSProperties> = {
     background: "rgba(37,99,235,.24)",
     boxShadow: "0 0 0 3px rgba(37,99,235,.25)",
     zIndex: 10,
+  },
+  resizeHandle: {
+    position: "absolute",
+    width: "14px",
+    height: "14px",
+    right: "-8px",
+    bottom: "-8px",
+    borderRadius: "3px",
+    border: "2px solid #ffffff",
+    background: "#1d4ed8",
+    boxShadow: "0 1px 4px rgba(15,23,42,.35)",
+    cursor: "nwse-resize",
+    touchAction: "none",
+    zIndex: 20,
   },
 };

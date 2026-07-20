@@ -29,6 +29,12 @@ export default function PdfCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const dragOffsetRef = useRef({ xPercent: 0, yPercent: 0 });
+  const resizeStartRef = useRef({
+    pointerXPercent: 0,
+    pointerYPercent: 0,
+    widthPercent: 0,
+    heightPercent: 0,
+  });
   const didMoveRef = useRef(false);
   const lastSaveRequestRef = useRef(0);
 
@@ -39,6 +45,7 @@ export default function PdfCanvas({
   const [fields, setFields] = useState<FieldBoxData[]>([]);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [dragFieldId, setDragFieldId] = useState<string | null>(null);
+  const [resizeFieldId, setResizeFieldId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
@@ -203,6 +210,37 @@ export default function PdfCanvas({
     );
   }
 
+  function updateFieldSize(
+    fieldId: string,
+    widthPercent: number,
+    heightPercent: number
+  ) {
+    setFields((current) =>
+      current.map((field) => {
+        if (field.id !== fieldId) return field;
+
+        const maxWidth = Math.max(
+          3,
+          Math.min(100 - field.xPercent + field.widthPercent / 2, 100)
+        );
+        const maxHeight = Math.max(
+          2,
+          Math.min(100 - field.yPercent + field.heightPercent / 2, 100)
+        );
+
+        return {
+          ...field,
+          widthPercent: Number(
+            Math.max(3, Math.min(maxWidth, widthPercent)).toFixed(3)
+          ),
+          heightPercent: Number(
+            Math.max(2, Math.min(maxHeight, heightPercent)).toFixed(3)
+          ),
+        };
+      })
+    );
+  }
+
   function handleFieldPointerDown(
     fieldId: string,
     event: PointerEvent<HTMLDivElement>
@@ -212,7 +250,15 @@ export default function PdfCanvas({
 
     setSelectedFieldId(fieldId);
 
-    if (activeTool !== "select") return;
+    const target = event.target as HTMLElement;
+
+    if (
+      activeTool !== "select" ||
+      resizeFieldId ||
+      target.closest('[data-vee-resize-handle="true"]')
+    ) {
+      return;
+    }
 
     const field = fields.find((item) => item.id === fieldId);
     const canvasWrap = canvasWrapRef.current;
@@ -234,12 +280,69 @@ export default function PdfCanvas({
     setStatusMessage(`Movendo campo Q${field.questionNumber}...`);
   }
 
+  function handleResizePointerDown(
+    fieldId: string,
+    event: PointerEvent<HTMLDivElement>
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (activeTool !== "select") return;
+
+    const field = fields.find((item) => item.id === fieldId);
+    const canvasWrap = canvasWrapRef.current;
+
+    if (!field || !canvasWrap) return;
+
+    const rect = canvasWrap.getBoundingClientRect();
+
+    resizeStartRef.current = {
+      pointerXPercent:
+        ((event.clientX - rect.left) / rect.width) * 100,
+      pointerYPercent:
+        ((event.clientY - rect.top) / rect.height) * 100,
+      widthPercent: field.widthPercent,
+      heightPercent: field.heightPercent,
+    };
+
+    didMoveRef.current = false;
+    setSelectedFieldId(fieldId);
+    setDragFieldId(null);
+    setResizeFieldId(fieldId);
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setStatusMessage(
+      `Redimensionando campo Q${field.questionNumber}...`
+    );
+  }
+
   function handleCanvasPointerMove(event: PointerEvent<HTMLDivElement>) {
-    if (!dragFieldId || activeTool !== "select") return;
+    if (activeTool !== "select") return;
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const pointerXPercent = ((event.clientX - rect.left) / rect.width) * 100;
-    const pointerYPercent = ((event.clientY - rect.top) / rect.height) * 100;
+    const pointerXPercent =
+      ((event.clientX - rect.left) / rect.width) * 100;
+    const pointerYPercent =
+      ((event.clientY - rect.top) / rect.height) * 100;
+
+    if (resizeFieldId) {
+      const deltaX =
+        pointerXPercent - resizeStartRef.current.pointerXPercent;
+      const deltaY =
+        pointerYPercent - resizeStartRef.current.pointerYPercent;
+
+      didMoveRef.current = true;
+
+      updateFieldSize(
+        resizeFieldId,
+        resizeStartRef.current.widthPercent + deltaX * 2,
+        resizeStartRef.current.heightPercent + deltaY * 2
+      );
+
+      return;
+    }
+
+    if (!dragFieldId) return;
 
     didMoveRef.current = true;
 
@@ -250,7 +353,23 @@ export default function PdfCanvas({
     );
   }
 
-  function finishDragging() {
+  function finishInteraction() {
+    if (resizeFieldId) {
+      const resizedField = fields.find(
+        (field) => field.id === resizeFieldId
+      );
+
+      setResizeFieldId(null);
+
+      if (didMoveRef.current && resizedField) {
+        setStatusMessage(
+          `Tamanho do campo Q${resizedField.questionNumber} ajustado. Clique em Salvar.`
+        );
+      }
+
+      return;
+    }
+
     if (!dragFieldId) return;
 
     const movedField = fields.find((field) => field.id === dragFieldId);
@@ -307,7 +426,8 @@ export default function PdfCanvas({
       activeTool === "select" ||
       !canvasSize.width ||
       !canvasSize.height ||
-      dragFieldId
+      dragFieldId ||
+      resizeFieldId
     ) {
       return;
     }
@@ -644,6 +764,15 @@ export default function PdfCanvas({
               <strong>Resposta correta</strong>
             </>
           )}
+          {activeTool === "select" && (
+            <>
+              <br />
+              <span style={{ fontSize: "13px" }}>
+                Arraste a caixa para mover. Arraste o quadradinho azul
+                no canto inferior direito para aumentar ou diminuir.
+              </span>
+            </>
+          )}
         </div>
       )}
 
@@ -666,15 +795,18 @@ export default function PdfCanvas({
             height: canvasSize.height || "auto",
             cursor:
               activeTool === "select"
-                ? dragFieldId
-                  ? "grabbing"
-                  : "default"
+                ? resizeFieldId
+                  ? "nwse-resize"
+                  : dragFieldId
+                    ? "grabbing"
+                    : "default"
                 : "crosshair",
           }}
           onClick={handleCanvasClick}
           onPointerMove={handleCanvasPointerMove}
-          onPointerUp={finishDragging}
-          onPointerCancel={finishDragging}
+          onPointerUp={finishInteraction}
+          onPointerCancel={finishInteraction}
+          onPointerLeave={finishInteraction}
         >
           <canvas ref={canvasRef} style={styles.canvas} />
 
@@ -682,8 +814,11 @@ export default function PdfCanvas({
             fields={visibleFields}
             selectedFieldId={selectedFieldId}
             draggingFieldId={dragFieldId}
+            resizingFieldId={resizeFieldId}
+            resizeEnabled={activeTool === "select"}
             onSelectField={handleSelectField}
             onFieldPointerDown={handleFieldPointerDown}
+            onResizePointerDown={handleResizePointerDown}
           />
         </div>
       </div>
