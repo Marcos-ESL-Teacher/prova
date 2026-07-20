@@ -1,18 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { jsPDF } from "jspdf";
-import QRCode from "qrcode";
 import { supabase } from "../../lib/supabase";
 
 type TabKey =
   | "dashboard"
   | "exams"
-  | "corrections"
   | "submissions"
   | "students"
   | "reports"
-  | "pdfReports"
   | "settings";
 
 type Submission = {
@@ -34,7 +30,6 @@ export default function TeacherDashboardPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pdfGeneratingId, setPdfGeneratingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -61,280 +56,6 @@ export default function TeacherDashboardPage() {
 
   function goTo(path: string) {
     window.location.href = path;
-  }
-
-  function getResultLink(submission: Submission) {
-    return `${window.location.origin}/student/result/${submission.id}`;
-  }
-
-  function getPerformanceLevel(score: number | null | undefined) {
-    const value = Number(score || 0);
-
-    if (value >= 9) return "Excellent";
-    if (value >= 8) return "Very Good";
-    if (value >= 7) return "Good";
-    if (value >= 6) return "Developing";
-    return "Needs Improvement";
-  }
-
-  function formatDate(value?: string | null) {
-    if (!value) return "Not available";
-
-    try {
-      return new Date(value).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-    } catch {
-      return value;
-    }
-  }
-
-  async function imageUrlToDataUrl(url: string) {
-    const absoluteUrl = url.startsWith("http")
-      ? url
-      : `${window.location.origin}${url}`;
-
-    const separator = absoluteUrl.includes("?") ? "&" : "?";
-    const response = await fetch(`${absoluteUrl}${separator}v=${Date.now()}`);
-
-    if (!response.ok) {
-      throw new Error(`Could not load image: ${url}`);
-    }
-
-    const blob = await response.blob();
-
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onloadend = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  function getImageFormat(dataUrl: string) {
-    return dataUrl.toLowerCase().includes("image/png") ? "PNG" : "JPEG";
-  }
-
-  async function generateProfessionalPdf(submission: Submission) {
-    setPdfGeneratingId(submission.id);
-
-    try {
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 14;
-      const resultLink = getResultLink(submission);
-
-      let logoDataUrl = "";
-      let qrDataUrl = "";
-
-      try {
-        logoDataUrl = await imageUrlToDataUrl("/logo.jpg");
-      } catch {
-        try {
-          logoDataUrl = await imageUrlToDataUrl("/logo.jpeg");
-        } catch {
-          logoDataUrl = "";
-        }
-      }
-
-      try {
-        qrDataUrl = await QRCode.toDataURL(resultLink, {
-          width: 180,
-          margin: 1,
-        });
-      } catch {
-        qrDataUrl = "";
-      }
-
-      const score = Number(submission.final_score ?? 0);
-      const percentage = Number(submission.final_percentage ?? 0);
-      const correctAnswers = Number(submission.correct_answers ?? 0);
-      const wrongAnswers = Number(submission.wrong_answers ?? 0);
-      const totalAnswers = correctAnswers + wrongAnswers;
-
-      // Background
-      pdf.setFillColor(248, 250, 252);
-      pdf.rect(0, 0, pageWidth, pageHeight, "F");
-
-      // Header - compact A4 layout
-      pdf.setFillColor(255, 255, 255);
-      pdf.roundedRect(margin, 10, pageWidth - margin * 2, 48, 4, 4, "F");
-
-      if (logoDataUrl) {
-        pdf.addImage(
-          logoDataUrl,
-          getImageFormat(logoDataUrl),
-          margin + 2,
-          14,
-          58,
-          34
-        );
-      }
-
-      const headerTextX = logoDataUrl ? margin + 68 : margin + 4;
-
-      pdf.setTextColor(17, 24, 39);
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(16);
-      pdf.text("ENGLISH PERFORMANCE REPORT", headerTextX, 24);
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(10);
-      pdf.setTextColor(71, 85, 105);
-      pdf.text("Marcos Private English Lessons", headerTextX, 33);
-      pdf.text("Learn English Since 2011", headerTextX, 40);
-
-      pdf.setDrawColor(17, 24, 39);
-      pdf.line(headerTextX, 49, pageWidth - margin - 4, 49);
-
-      let y = 68;
-
-      // Student Information
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(12);
-      pdf.setTextColor(17, 24, 39);
-      pdf.text("Student Information", margin, y);
-
-      y += 7;
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(9.5);
-      pdf.setTextColor(17, 24, 39);
-      pdf.text(`Student Name: ${submission.student_name || "Not provided"}`, margin, y);
-      y += 6;
-      pdf.text(`Email: ${submission.student_email || "Not provided"}`, margin, y);
-      y += 6;
-      pdf.text(`Exam: ${submission.exam_name || submission.book_name || "Assessment"}`, margin, y);
-      y += 6;
-      pdf.text(`Protocol: ${submission.protocol || submission.id}`, margin, y);
-      y += 6;
-      pdf.text(`Date: ${formatDate(submission.created_at)}`, margin, y);
-
-      y += 13;
-
-      // Performance Summary - compact
-      pdf.setFillColor(239, 246, 255);
-      pdf.roundedRect(margin, y - 7, pageWidth - margin * 2, 30, 4, 4, "F");
-
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(12);
-      pdf.setTextColor(30, 64, 175);
-      pdf.text("Performance Summary", margin + 5, y);
-
-      y += 8;
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(9.5);
-      pdf.setTextColor(17, 24, 39);
-      pdf.text(`Final Score: ${score || 0}/10`, margin + 5, y);
-      pdf.text(`Percentage: ${percentage || 0}%`, margin + 68, y);
-      y += 6;
-      pdf.text(`Correct Answers: ${correctAnswers}/${totalAnswers || "—"}`, margin + 5, y);
-      pdf.text(`Performance Level: ${getPerformanceLevel(score)}`, margin + 68, y);
-
-      y += 19;
-
-      // Teacher Comments - reduced height
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(12);
-      pdf.setTextColor(17, 24, 39);
-      pdf.text("Teacher Comments", margin, y);
-
-      y += 6;
-
-      pdf.setDrawColor(203, 213, 225);
-      pdf.setFillColor(255, 255, 255);
-      pdf.roundedRect(margin, y, pageWidth - margin * 2, 20, 3, 3, "FD");
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8.5);
-      pdf.setTextColor(100, 116, 139);
-      pdf.text("Teacher comments can be added from the Corrections page.", margin + 4, y + 8);
-
-      y += 30;
-
-      // AI Feedback - reduced height
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(12);
-      pdf.setTextColor(17, 24, 39);
-      pdf.text("AI Feedback", margin, y);
-
-      y += 6;
-
-      pdf.setDrawColor(203, 213, 225);
-      pdf.setFillColor(255, 255, 255);
-      pdf.roundedRect(margin, y, pageWidth - margin * 2, 20, 3, 3, "FD");
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8.5);
-      pdf.setTextColor(100, 116, 139);
-      pdf.text(
-        "AI feedback will appear here after the AI correction module is connected.",
-        margin + 4,
-        y + 8
-      );
-
-      // Footer fixed inside A4 safe print area
-      const footerY = pageHeight - 68;
-      const qrSize = 24;
-
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(12);
-      pdf.setTextColor(17, 24, 39);
-      pdf.text("Online Result", margin, footerY);
-
-      if (qrDataUrl) {
-        pdf.addImage(qrDataUrl, "PNG", margin, footerY + 6, qrSize, qrSize);
-      }
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(7.5);
-      pdf.setTextColor(71, 85, 105);
-      const linkLines = pdf.splitTextToSize(
-        resultLink,
-        pageWidth - margin * 2 - qrSize - 12
-      );
-      pdf.text(linkLines, margin + qrSize + 8, footerY + 16);
-
-      pdf.setDrawColor(17, 24, 39);
-      pdf.line(pageWidth - margin - 74, footerY + 28, pageWidth - margin, footerY + 28);
-
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(9);
-      pdf.setTextColor(17, 24, 39);
-      pdf.text("Prof. Marcos Rogerio Leitao", pageWidth - margin - 37, footerY + 35, {
-        align: "center",
-      });
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8);
-      pdf.setTextColor(71, 85, 105);
-      pdf.text("Teacher / English Coach", pageWidth - margin - 37, footerY + 41, {
-        align: "center",
-      });
-
-      pdf.setFontSize(7);
-      pdf.setTextColor(148, 163, 184);
-      pdf.text(
-        "This report focuses on learning progress and does not include Pass/Fail status.",
-        margin,
-        pageHeight - 10
-      );
-
-      const safeName = (submission.student_name || "student")
-        .replace(/[^a-z0-9]/gi, "-")
-        .toLowerCase();
-
-      pdf.save(`english-performance-report-${safeName}.pdf`);
-    } catch (error: any) {
-      alert("Error generating PDF: " + (error?.message || String(error)));
-    } finally {
-      setPdfGeneratingId(null);
-    }
   }
 
   const stats = useMemo(() => {
@@ -384,14 +105,42 @@ export default function TeacherDashboardPage() {
       </header>
 
       <nav style={styles.tabs}>
-        <TabButton label="Dashboard" tab="dashboard" activeTab={activeTab} setActiveTab={setActiveTab} />
-        <TabButton label="Exams" tab="exams" activeTab={activeTab} setActiveTab={setActiveTab} />
-        <TabButton label="Corrections" tab="corrections" activeTab={activeTab} setActiveTab={setActiveTab} />
-        <TabButton label="Submissions" tab="submissions" activeTab={activeTab} setActiveTab={setActiveTab} />
-        <TabButton label="Students" tab="students" activeTab={activeTab} setActiveTab={setActiveTab} />
-        <TabButton label="Reports" tab="reports" activeTab={activeTab} setActiveTab={setActiveTab} />
-        <TabButton label="PDF Reports" tab="pdfReports" activeTab={activeTab} setActiveTab={setActiveTab} />
-        <TabButton label="Settings" tab="settings" activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TabButton
+          label="Dashboard"
+          tab="dashboard"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+        <TabButton
+          label="Exams"
+          tab="exams"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+        <TabButton
+          label="Corrigir Provas"
+          tab="submissions"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+        <TabButton
+          label="Students"
+          tab="students"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+        <TabButton
+          label="Reports"
+          tab="reports"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+        <TabButton
+          label="Settings"
+          tab="settings"
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
       </nav>
 
       {activeTab === "dashboard" && (
@@ -410,8 +159,8 @@ export default function TeacherDashboardPage() {
                 <p style={styles.muted}>Latest student submissions and corrections.</p>
               </div>
 
-              <button onClick={() => goTo("/admin/corrections")} style={styles.primaryButton}>
-                Open Corrections
+              <button onClick={() => goTo("/admin/submissions")} style={styles.primaryButton}>
+                Corrigir Provas
               </button>
             </div>
 
@@ -462,48 +211,49 @@ export default function TeacherDashboardPage() {
         />
       )}
 
-      {activeTab === "corrections" && (
-        <SectionCard
-          title="Corrections"
-          description="Review student answers, add teacher comments, AI feedback, final scores, result links, PDF reports, and WhatsApp sharing."
-          actions={[
-            {
-              label: "Open Intelligent Corrections",
-              description: "Correct submissions, finalize scores, generate PDF, and copy result links.",
-              onClick: () => goTo("/admin/corrections"),
-            },
-            {
-              label: "View All Submissions",
-              description: "Open the submissions list.",
-              onClick: () => goTo("/admin/submissions"),
-            },
-          ]}
-        />
-      )}
-
       {activeTab === "submissions" && (
         <section style={styles.card}>
           <div style={styles.cardHeader}>
             <div>
-              <h2 style={styles.cardTitle}>Submissions</h2>
-              <p style={styles.muted}>Recent student submissions.</p>
+              <h2 style={styles.cardTitle}>Corrigir Provas</h2>
+              <p style={styles.muted}>
+                Abra uma entrega para conferir respostas, calcular a nota e gerar o PDF corrigido.
+              </p>
             </div>
 
-            <button onClick={() => goTo("/admin/submissions")} style={styles.primaryButton}>
-              Open Submissions Page
+            <button
+              onClick={() => goTo("/admin/submissions")}
+              style={styles.primaryButton}
+            >
+              Abrir lista completa
             </button>
           </div>
+
+          {loading && <p style={styles.muted}>Loading...</p>}
+
+          {!loading && submissions.length === 0 && (
+            <p style={styles.muted}>No submissions yet.</p>
+          )}
 
           {submissions.map((submission) => (
             <div key={submission.id} style={styles.activityItem}>
               <div>
                 <strong>{submission.student_name || "Unnamed Student"}</strong>
-                <p style={styles.muted}>Email: {submission.student_email || "Not provided"}</p>
-                <p style={styles.muted}>Protocol: {submission.protocol || submission.id}</p>
+                <p style={styles.muted}>
+                  {submission.exam_name || submission.book_name || "Exam"}
+                </p>
+                <p style={styles.muted}>
+                  Protocol: {submission.protocol || submission.id}
+                </p>
               </div>
 
-              <button onClick={() => goTo("/admin/corrections")} style={styles.secondaryButton}>
-                Review
+              <button
+                onClick={() =>
+                  goTo(`/admin/submissions/${submission.id}`)
+                }
+                style={styles.primaryButton}
+              >
+                Abrir correção
               </button>
             </div>
           ))}
@@ -516,9 +266,9 @@ export default function TeacherDashboardPage() {
           description="Student records and history will be centralized here. For now, use submissions and corrections to view student activity."
           actions={[
             {
-              label: "Open Corrections",
+              label: "Open Student Submissions",
               description: "View students through submitted exams.",
-              onClick: () => goTo("/admin/corrections"),
+              onClick: () => goTo("/admin/submissions"),
             },
           ]}
         />
@@ -530,70 +280,12 @@ export default function TeacherDashboardPage() {
           description="Performance reports, PDF reports, result links, and study recommendations."
           actions={[
             {
-              label: "Generate Reports from Corrections",
-              description: "Finalize corrections and generate PDF reports.",
-              onClick: () => goTo("/admin/corrections"),
+              label: "Generate Reports from Submissions",
+              description: "Open a corrected submission and generate its PDF report.",
+              onClick: () => goTo("/admin/submissions"),
             },
           ]}
         />
-      )}
-
-      {activeTab === "pdfReports" && (
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <div>
-              <h2 style={styles.cardTitle}>Professional PDF Reports</h2>
-              <p style={styles.muted}>
-                Generate student performance reports with logo, professional header,
-                final score, result QR code, and teacher signature.
-              </p>
-            </div>
-
-            <button onClick={() => goTo("/admin/corrections")} style={styles.primaryButton}>
-              Open Corrections
-            </button>
-          </div>
-
-          <div style={styles.reportPreview}>
-            <div style={styles.reportHeaderPreview}>
-              <img src="/logo.jpg" alt="Marcos Private English Lessons" style={styles.reportLogo} />
-
-              <div>
-                <h3 style={styles.reportTitle}>ENGLISH PERFORMANCE REPORT</h3>
-                <p style={styles.reportSubtitle}>Marcos Private English Lessons</p>
-                <p style={styles.reportSubtitle}>Learn English Since 2011</p>
-              </div>
-            </div>
-
-            <p style={styles.muted}>
-              Select a recent submission below and generate a professional PDF report.
-            </p>
-
-            {submissions.length === 0 && <p style={styles.muted}>No submissions available yet.</p>}
-
-            {submissions.map((submission) => (
-              <div key={submission.id} style={styles.pdfSubmissionRow}>
-                <div>
-                  <strong>{submission.student_name || "Unnamed Student"}</strong>
-                  <p style={styles.muted}>
-                    {submission.exam_name || submission.book_name || "Assessment"}
-                  </p>
-                  <p style={styles.muted}>
-                    Score: {submission.final_score ?? "Not finalized"} / 10
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => generateProfessionalPdf(submission)}
-                  disabled={pdfGeneratingId === submission.id}
-                  style={styles.pdfActionButton}
-                >
-                  {pdfGeneratingId === submission.id ? "Generating..." : "Generate Professional PDF"}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
       )}
 
       {activeTab === "settings" && (
@@ -879,62 +571,6 @@ logo: {
     flexDirection: "column",
     gap: "8px",
     color: "#111827",
-  },
-
-  reportPreview: {
-    background: "#f8fafc",
-    border: "1px solid #e5e7eb",
-    borderRadius: "18px",
-    padding: "22px",
-    marginTop: "18px",
-  },
-
-  reportHeaderPreview: {
-    display: "flex",
-    alignItems: "center",
-    gap: "16px",
-    borderBottom: "2px solid #111827",
-    paddingBottom: "16px",
-    marginBottom: "18px",
-  },
-
-reportLogo: {
-  width: "220px",
-  height: "120px",
-  objectFit: "contain",
-  background: "transparent",
-},
-
-  reportTitle: {
-    margin: "0 0 6px",
-    letterSpacing: "0.04em",
-  },
-
-  reportSubtitle: {
-    margin: "2px 0",
-    color: "#64748b",
-  },
-
-  pdfSubmissionRow: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
-    borderRadius: "14px",
-    padding: "14px",
-    marginTop: "12px",
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "14px",
-    alignItems: "center",
-  },
-
-  pdfActionButton: {
-    background: "#dc2626",
-    color: "#fff",
-    border: "none",
-    borderRadius: "10px",
-    padding: "12px 16px",
-    cursor: "pointer",
-    fontWeight: "bold",
   },
 
   settingsGrid: {
