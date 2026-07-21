@@ -505,20 +505,26 @@ export default function SubmissionDetailPage() {
     return y + lines.length * lineHeight;
   }
 
-  async function getTeacherStampBase64() {
-    const possibleStampPaths = [
-      "/teacher_stamp.png",
-      "/teacher_stamp.jpg",
-      "/teacher_stamp.jpeg",
-    ];
+async function getTeacherStampBase64(light = false) {
+  const possibleStampPaths = light
+    ? [
+        "/teacher_stamp_light.png",
+        "/teacher_stamp_light.jpg",
+        "/teacher_stamp_light.jpeg",
+      ]
+    : [
+        "/teacher_stamp.png",
+        "/teacher_stamp.jpg",
+        "/teacher_stamp.jpeg",
+      ];
 
-    for (const stampPath of possibleStampPaths) {
-      const base64 = await imageToBase64(stampPath);
-      if (base64) return base64;
-    }
-
-    return null;
+  for (const stampPath of possibleStampPaths) {
+    const base64 = await imageToBase64(stampPath);
+    if (base64) return base64;
   }
+
+  return null;
+}
 
   async function gerarPdfVisualCorrigido() {
     if (!submission || !veePdfUrl) {
@@ -527,7 +533,8 @@ export default function SubmissionDetailPage() {
     }
 
     try {
-      const teacherStampBase64 = await getTeacherStampBase64();
+    const teacherStampBase64 = await getTeacherStampBase64(false);
+const teacherStampLightBase64 = await getTeacherStampBase64(true);
 
       const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
@@ -587,56 +594,29 @@ export default function SubmissionDetailPage() {
           pageHeightMm
         );
 
-        if (pageNumber === 1) {
-          const summary = calcularResultado();
+const currentStamp =
+  pageNumber === 1
+    ? teacherStampBase64
+    : teacherStampLightBase64 || teacherStampBase64;
 
-          if (teacherStampBase64) {
-            const stampWidth = 34;
-            const stampHeight = 23;
-            const stampX = pageWidthMm - stampWidth - 4;
-            const stampY = 3;
+if (currentStamp) {
+  const stampWidth = pageNumber === 1 ? 34 : 24;
+  const stampHeight = pageNumber === 1 ? 23 : 16;
+  const stampX = pageWidthMm - stampWidth - 4;
+  const stampY = 3;
 
-            output.addImage(
-              teacherStampBase64,
-              teacherStampBase64.toLowerCase().includes("image/png")
-                ? "PNG"
-                : "JPEG",
-              stampX,
-              stampY,
-              stampWidth,
-              stampHeight
-            );
-          }
-
-          const boxWidth = 50;
-          const boxHeight = 24;
-          const boxX = pageWidthMm - boxWidth - 4;
-          const boxY = teacherStampBase64 ? 29 : 8;
-
-          output.setFillColor(255, 255, 255);
-          output.setDrawColor(148, 163, 184);
-          output.setLineWidth(0.35);
-          output.roundedRect(
-            boxX,
-            boxY,
-            boxWidth,
-            boxHeight,
-            2,
-            2,
-            "FD"
-          );
-
-          output.setFont("helvetica", "bold");
-          output.setFontSize(7.5);
-          output.setTextColor(17, 24, 39);
-
-          output.text(`Total: ${summary.total}`, boxX + 4, boxY + 6);
-          output.text(`Correct: ${summary.acertos}`, boxX + 4, boxY + 11);
-          output.text(`Incorrect: ${summary.erros}`, boxX + 4, boxY + 16);
-          output.text(`Score: ${summary.nota}%`, boxX + 4, boxY + 21);
-        }
-
-        const pageFields = veeFields.filter(
+  output.addImage(
+    currentStamp,
+    currentStamp.toLowerCase().includes("image/png")
+      ? "PNG"
+      : "JPEG",
+    stampX,
+    stampY,
+    stampWidth,
+    stampHeight
+  );
+}
+const pageFields = veeFields.filter(
           (field) => Number(field.metadata?.page || 1) === pageNumber
         );
 
@@ -794,7 +774,118 @@ export default function SubmissionDetailPage() {
         alert("Não foi possível gerar o PDF corrigido.");
         return;
       }
+const finalResult = calcularResultado();
 
+output.addPage([210, 297], "portrait");
+
+output.setFillColor(248, 250, 252);
+output.rect(0, 0, 210, 297, "F");
+
+output.setDrawColor(30, 64, 175);
+output.setLineWidth(1.2);
+output.roundedRect(20, 24, 170, 225, 5, 5, "S");
+
+output.setFont("helvetica", "bold");
+output.setFontSize(24);
+output.setTextColor(17, 24, 39);
+output.text("FINAL RESULT", 105, 48, {
+  align: "center",
+});
+
+output.setDrawColor(148, 163, 184);
+output.setLineWidth(0.4);
+output.line(42, 57, 168, 57);
+
+output.setFont("helvetica", "normal");
+output.setFontSize(11);
+output.setTextColor(71, 85, 105);
+output.text("STUDENT", 105, 72, {
+  align: "center",
+});
+
+output.setFont("helvetica", "bold");
+output.setFontSize(16);
+output.setTextColor(17, 24, 39);
+output.text(
+  String(submission.student_name || "Student"),
+  105,
+  82,
+  {
+    align: "center",
+    maxWidth: 155,
+  }
+);
+
+output.setFillColor(255, 255, 255);
+output.setDrawColor(203, 213, 225);
+output.setLineWidth(0.4);
+output.roundedRect(38, 98, 134, 78, 4, 4, "FD");
+
+output.setFont("helvetica", "normal");
+output.setFontSize(12);
+output.setTextColor(71, 85, 105);
+
+output.text("Total Questions", 52, 116);
+output.text("Correct Answers", 52, 132);
+output.text("Incorrect Answers", 52, 148);
+output.text("Final Score", 52, 164);
+
+output.setFont("helvetica", "bold");
+output.setTextColor(17, 24, 39);
+
+output.text(String(finalResult.total), 158, 116, {
+  align: "right",
+});
+
+output.setTextColor(22, 163, 74);
+output.text(String(finalResult.acertos), 158, 132, {
+  align: "right",
+});
+
+output.setTextColor(220, 38, 38);
+output.text(String(finalResult.erros), 158, 148, {
+  align: "right",
+});
+
+output.setFontSize(18);
+output.setTextColor(30, 64, 175);
+output.text(`${finalResult.nota}%`, 158, 165, {
+  align: "right",
+});
+
+if (teacherStampBase64) {
+  output.addImage(
+    teacherStampBase64,
+    teacherStampBase64.toLowerCase().includes("image/png")
+      ? "PNG"
+      : "JPEG",
+    79,
+    188,
+    52,
+    35
+  );
+}
+
+output.setDrawColor(100, 116, 139);
+output.setLineWidth(0.3);
+output.line(62, 232, 148, 232);
+
+output.setFont("helvetica", "normal");
+output.setFontSize(9);
+output.setTextColor(71, 85, 105);
+output.text("Teacher's signature", 105, 239, {
+  align: "center",
+});
+
+output.setFontSize(8);
+output.text(
+  `Protocol: ${submission.protocol || submissionId}`,
+  105,
+  265,
+  {
+    align: "center",
+  }
+);
       const safeName = (submission.student_name || "student")
         .replace(/\s+/g, "_")
         .replace(/[^\w-]/g, "");
