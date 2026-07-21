@@ -507,9 +507,9 @@ export default function SubmissionDetailPage() {
 
   async function getTeacherStampBase64() {
     const possibleStampPaths = [
+      "/teacher_stamp.png",
       "/teacher_stamp.jpg",
       "/teacher_stamp.jpeg",
-      "/teacher_stamp.png",
     ];
 
     for (const stampPath of possibleStampPaths) {
@@ -591,10 +591,10 @@ export default function SubmissionDetailPage() {
           const summary = calcularResultado();
 
           if (teacherStampBase64) {
-            const stampWidth = 54;
-            const stampHeight = 36;
-            const stampX = pageWidthMm - stampWidth - 8;
-            const stampY = 6;
+            const stampWidth = 34;
+            const stampHeight = 23;
+            const stampX = pageWidthMm - stampWidth - 4;
+            const stampY = 3;
 
             output.addImage(
               teacherStampBase64,
@@ -608,10 +608,10 @@ export default function SubmissionDetailPage() {
             );
           }
 
-          const boxWidth = 55;
+          const boxWidth = 50;
           const boxHeight = 24;
-          const boxX = pageWidthMm - boxWidth - 8;
-          const boxY = teacherStampBase64 ? 44 : 8;
+          const boxX = pageWidthMm - boxWidth - 4;
+          const boxY = teacherStampBase64 ? 29 : 8;
 
           output.setFillColor(255, 255, 255);
           output.setDrawColor(148, 163, 184);
