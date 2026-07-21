@@ -56,6 +56,10 @@ export default function ExamsAdminPage() {
   const [pastas, setPastas] = useState<any[]>([]);
   const [slots, setSlots] = useState<any[]>([]);
   const [provas, setProvas] = useState<any[]>([]);
+  const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
+  const [draggingExamId, setDraggingExamId] = useState<string | null>(null);
+  const [savingSlotOrder, setSavingSlotOrder] = useState(false);
+  const [savingExamOrder, setSavingExamOrder] = useState(false);
 
   const [colecaoSelecionada, setColecaoSelecionada] = useState<any>(null);
   const [livroSelecionado, setLivroSelecionado] = useState<any>(null);
@@ -206,6 +210,98 @@ const [visualFieldType, setVisualFieldType] =
 
     if (error) return alert(error.message);
     setProvas(data || []);
+  }
+
+  async function salvarOrdemSlots(novaLista: any[]) {
+    if (!pastaSelecionada) return;
+
+    setSavingSlotOrder(true);
+
+    const listaNormalizada = novaLista.map((slot, index) => ({
+      ...slot,
+      sort_order: index + 1,
+    }));
+
+    setSlots(listaNormalizada);
+
+    const resultados = await Promise.all(
+      listaNormalizada.map((slot) =>
+        supabase
+          .from("exam_slots")
+          .update({ sort_order: slot.sort_order })
+          .eq("id", slot.id)
+      )
+    );
+
+    const erro = resultados.find((resultado) => resultado.error)?.error;
+
+    setSavingSlotOrder(false);
+
+    if (erro) {
+      alert("Erro ao salvar a nova ordem dos slots: " + erro.message);
+      await abrirPasta(pastaSelecionada);
+    }
+  }
+
+  async function moverSlotPara(draggedId: string, targetId: string) {
+    if (!draggedId || draggedId === targetId || savingSlotOrder) return;
+
+    const origem = slots.findIndex((slot) => slot.id === draggedId);
+    const destino = slots.findIndex((slot) => slot.id === targetId);
+
+    if (origem < 0 || destino < 0) return;
+
+    const novaLista = [...slots];
+    const [movido] = novaLista.splice(origem, 1);
+    novaLista.splice(destino, 0, movido);
+
+    await salvarOrdemSlots(novaLista);
+  }
+
+  async function salvarOrdemProvas(novaLista: any[]) {
+    if (!slotSelecionado) return;
+
+    setSavingExamOrder(true);
+
+    const listaNormalizada = novaLista.map((prova, index) => ({
+      ...prova,
+      sort_order: index + 1,
+    }));
+
+    setProvas(listaNormalizada);
+
+    const resultados = await Promise.all(
+      listaNormalizada.map((prova) =>
+        supabase
+          .from("exams")
+          .update({ sort_order: prova.sort_order })
+          .eq("id", prova.id)
+      )
+    );
+
+    const erro = resultados.find((resultado) => resultado.error)?.error;
+
+    setSavingExamOrder(false);
+
+    if (erro) {
+      alert("Erro ao salvar a nova ordem das provas: " + erro.message);
+      await abrirSlot(slotSelecionado);
+    }
+  }
+
+  async function moverProvaPara(draggedId: string, targetId: string) {
+    if (!draggedId || draggedId === targetId || savingExamOrder) return;
+
+    const origem = provas.findIndex((prova) => prova.id === draggedId);
+    const destino = provas.findIndex((prova) => prova.id === targetId);
+
+    if (origem < 0 || destino < 0) return;
+
+    const novaLista = [...provas];
+    const [movida] = novaLista.splice(origem, 1);
+    novaLista.splice(destino, 0, movida);
+
+    await salvarOrdemProvas(novaLista);
   }
 
   async function adicionarSlot() {
@@ -2300,6 +2396,10 @@ ${link}`);
           {pastaSelecionada && (
             <div style={styles.selectedBox}>
               Pasta selecionada: <strong>{pastaSelecionada.name}</strong>
+              <div style={styles.dragHelp}>
+                ↕ Arraste os slots para mudar a ordem.
+                {savingSlotOrder && <strong> Salvando...</strong>}
+              </div>
             </div>
           )}
 
@@ -2313,7 +2413,35 @@ ${link}`);
           )}
 
           {slots.map((s) => (
-            <div key={s.id} style={styles.slotRow}>
+            <div
+              key={s.id}
+              style={{
+                ...styles.slotRow,
+                ...(draggingSlotId === s.id ? styles.draggingRow : {}),
+              }}
+              draggable={!savingSlotOrder}
+              onDragStart={(event) => {
+                setDraggingSlotId(s.id);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", s.id);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={async (event) => {
+                event.preventDefault();
+                const draggedId =
+                  draggingSlotId || event.dataTransfer.getData("text/plain");
+                setDraggingSlotId(null);
+                await moverSlotPara(draggedId, s.id);
+              }}
+              onDragEnd={() => setDraggingSlotId(null)}
+            >
+              <div style={styles.dragHandle} title="Arraste para mudar a ordem">
+                ⋮⋮
+              </div>
+
               <button
                 style={itemStyle(slotSelecionado?.id === s.id)}
                 onClick={() => abrirSlot(s)}
@@ -2347,6 +2475,10 @@ ${link}`);
         <section style={styles.provasCard}>
           <h2 style={styles.cardTitle}>📄 Provas em: {slotSelecionado.name}</h2>
           <p style={styles.subtitle}>Pasta: {pastaSelecionada?.name || "Não informada"}</p>
+          <div style={styles.dragNotice}>
+            ↕ Depois de adicionar uma prova, arraste-a para colocá-la entre as outras.
+            {savingExamOrder && <strong> Salvando nova ordem...</strong>}
+          </div>
 
           <input
             placeholder="Nome da prova"
@@ -2372,7 +2504,35 @@ ${link}`);
             )}
 
             {provas.map((p) => (
-              <div key={p.id} style={styles.provaItem}>
+              <div
+                key={p.id}
+                style={{
+                  ...styles.provaItem,
+                  ...(draggingExamId === p.id ? styles.draggingRow : {}),
+                }}
+                draggable={!savingExamOrder}
+                onDragStart={(event) => {
+                  setDraggingExamId(p.id);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", p.id);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={async (event) => {
+                  event.preventDefault();
+                  const draggedId =
+                    draggingExamId || event.dataTransfer.getData("text/plain");
+                  setDraggingExamId(null);
+                  await moverProvaPara(draggedId, p.id);
+                }}
+                onDragEnd={() => setDraggingExamId(null)}
+              >
+                <div style={styles.examDragHandle} title="Arraste para mudar a ordem">
+                  ⋮⋮
+                </div>
+
                 <div style={styles.provaInfo}>
                   <strong>{p.title}</strong>
                   {p.description && <p>{p.description}</p>}
@@ -3129,9 +3289,57 @@ const styles: any = {
 
   slotRow: {
     display: "grid",
-    gridTemplateColumns: "1fr auto",
+    gridTemplateColumns: "24px 1fr auto",
     gap: "8px",
     alignItems: "start",
+    borderRadius: "10px",
+    transition: "opacity 0.15s ease, transform 0.15s ease",
+  },
+
+  dragHandle: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "42px",
+    color: "#64748b",
+    cursor: "grab",
+    fontWeight: "bold",
+    fontSize: "18px",
+    userSelect: "none",
+  },
+
+  examDragHandle: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#64748b",
+    cursor: "grab",
+    fontWeight: "bold",
+    fontSize: "20px",
+    userSelect: "none",
+    padding: "0 4px",
+  },
+
+  draggingRow: {
+    opacity: 0.45,
+    transform: "scale(0.99)",
+  },
+
+  dragHelp: {
+    marginTop: "6px",
+    color: "#475569",
+    fontSize: "12px",
+  },
+
+  dragNotice: {
+    marginTop: "12px",
+    marginBottom: "14px",
+    padding: "10px 12px",
+    border: "1px dashed #93c5fd",
+    borderRadius: "9px",
+    background: "#eff6ff",
+    color: "#1e40af",
+    fontSize: "14px",
   },
 
   slotActions: {
