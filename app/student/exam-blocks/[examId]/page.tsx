@@ -635,6 +635,32 @@ function renderVisualFieldV5(field: VisualField) {
     );
   }
 
+  if (field.field_type === "circle_word") {
+    const optionValue = String(field.answer_value || "");
+    const selected = answers[questionKey] === optionValue;
+
+    return (
+      <button
+        key={field.id}
+        type="button"
+        aria-pressed={selected}
+        aria-label={`Selecionar ${optionValue} na questão ${field.question_number}`}
+        onClick={() => updateAnswer(questionKey, optionValue)}
+        style={{
+          ...styles.visualCircleWord,
+          ...(selected ? styles.visualCircleWordSelected : {}),
+          left: `${field.x}%`,
+          top: `${field.y}%`,
+          width: `${field.width}%`,
+          height: `${field.height}%`,
+          pointerEvents: "auto",
+        }}
+      >
+        <span style={styles.visualCircleWordText}>{optionValue}</span>
+      </button>
+    );
+  }
+
   if (field.field_type === "checkbox") {
     const optionValue = String(field.answer_value || "");
     const currentValues = String(answers[questionKey] || "")
@@ -719,6 +745,9 @@ function renderVisualFieldV5(field: VisualField) {
     const firstField = fields[0];
     const questionKey = `visual_q_${questionNumber}`;
     const hasChoice = fields.some((field) => field.field_type === "choice");
+    const hasCircleWord = fields.some(
+      (field) => field.field_type === "circle_word"
+    );
     const hasCheckbox = fields.some(
       (field) => field.field_type === "checkbox"
     );
@@ -755,6 +784,42 @@ function renderVisualFieldV5(field: VisualField) {
                 <span style={styles.optionLetter}>{letter}</span>
               </label>
             ))}
+          </div>
+        </section>
+      );
+    }
+
+    if (hasCircleWord) {
+      const options = fields
+        .filter((field) => field.field_type === "circle_word")
+        .map((field) => String(field.answer_value || "").trim())
+        .filter(Boolean);
+
+      const uniqueOptions = Array.from(new Set(options));
+
+      return (
+        <section key={questionNumber} style={styles.stableQuestionCard}>
+          <h3 style={styles.questionTitle}>Question {questionNumber}</h3>
+
+          <div style={styles.stableCircleWordsGrid}>
+            {uniqueOptions.map((value) => {
+              const selected = answers[questionKey] === value;
+
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => updateAnswer(questionKey, value)}
+                  style={{
+                    ...styles.stableCircleWord,
+                    ...(selected ? styles.stableCircleWordSelected : {}),
+                  }}
+                >
+                  {value}
+                </button>
+              );
+            })}
           </div>
         </section>
       );
@@ -1507,6 +1572,57 @@ const styles: any = {
     background: "rgba(219, 234, 254, 0.85)",
     color: "#1d4ed8",
     border: "3px solid #1d4ed8",
+  },
+
+  visualCircleWord: {
+    position: "absolute",
+    transform: "translate(-50%, -50%)",
+    padding: 0,
+    margin: 0,
+    border: "2px solid transparent",
+    background: "transparent",
+    color: "transparent",
+    borderRadius: "50%",
+    cursor: "pointer",
+    outline: "none",
+    zIndex: 510,
+  },
+
+  visualCircleWordSelected: {
+    border: "3px solid #2563eb",
+    background: "rgba(255,255,255,0.08)",
+    boxShadow: "0 0 0 1px rgba(255,255,255,0.55)",
+  },
+
+  visualCircleWordText: {
+    opacity: 0,
+    pointerEvents: "none",
+    userSelect: "none",
+  },
+
+  stableCircleWordsGrid: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "14px",
+    marginTop: "10px",
+  },
+
+  stableCircleWord: {
+    position: "relative",
+    padding: "10px 16px",
+    border: "2px solid transparent",
+    borderRadius: "999px",
+    background: "transparent",
+    color: "#111827",
+    cursor: "pointer",
+    fontSize: "17px",
+    fontWeight: "bold",
+  },
+
+  stableCircleWordSelected: {
+    border: "3px solid #2563eb",
+    color: "#1d4ed8",
+    background: "#eff6ff",
   },
 
   visualTextInput: {

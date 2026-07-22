@@ -33,9 +33,11 @@ export default function FieldBox({
   const typeLabel =
     field.fieldType === "choice"
       ? `⭕ ${field.answerValue || "?"}`
-      : field.fieldType === "checkbox"
-        ? `☑ ${field.answerValue || "?"}`
-        : `Q${field.questionNumber}`;
+      : field.fieldType === "circle_word"
+        ? `🔵 ${field.answerValue || "Palavra"}`
+        : field.fieldType === "checkbox"
+          ? `☑ ${field.answerValue || "?"}`
+          : `Q${field.questionNumber}`;
 
   return (
     <div

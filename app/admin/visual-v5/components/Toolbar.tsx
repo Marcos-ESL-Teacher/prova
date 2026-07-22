@@ -3,7 +3,12 @@
 import type { CSSProperties } from "react";
 
 export type ViewMode = "pdf" | "iframe";
-export type ToolMode = "select" | "text" | "choice" | "checkbox";
+export type ToolMode =
+  | "select"
+  | "text"
+  | "choice"
+  | "circle_word"
+  | "checkbox";
 
 type ToolbarProps = {
   viewMode: ViewMode;
@@ -53,12 +58,24 @@ export default function Toolbar({
         </button>
 
         <button
-          type="button"
-          style={activeTool === "checkbox" ? styles.active : styles.button}
-          onClick={() => choose("checkbox")}
-        >
-          ☑ Checkbox
-        </button>
+  type="button"
+  style={
+    activeTool === "circle_word"
+      ? styles.active
+      : styles.button
+  }
+  onClick={() => choose("circle_word")}
+>
+  ⭕ Circular Palavra
+</button>
+
+<button
+  type="button"
+  style={activeTool === "checkbox" ? styles.active : styles.button}
+  onClick={() => choose("checkbox")}
+>
+  ☑ Checkbox
+</button>
 
         <button type="button" style={styles.save} onClick={onSave}>
           💾 Salvar

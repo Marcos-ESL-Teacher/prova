@@ -145,6 +145,8 @@ export default function VisualV5ExamPage() {
                     "✏ Texto: clique na lacuna, informe o número da questão e o gabarito."}
                   {activeTool === "choice" &&
                     "⭕ Alternativa: clique ao lado da opção e informe questão, letra e se é correta."}
+                  {activeTool === "circle_word" &&
+                    "⭕ Circular Palavra: clique sobre a palavra que o aluno deverá poder circular."}
                   {activeTool === "checkbox" &&
                     "☑ Checkbox: clique ao lado da opção e informe questão, valor e se é correta."}
                 </div>

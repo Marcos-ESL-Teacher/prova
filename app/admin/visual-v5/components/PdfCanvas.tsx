@@ -485,6 +485,23 @@ export default function PdfCanvas({
       label = `Alternativa ${answerValue}`;
     }
 
+if (activeTool === "circle_word") {
+  const optionValue = askAnswerValue(
+    "Palavra que será circulada:",
+    "word"
+  );
+
+  if (optionValue === null) return;
+
+  fieldType = "circle_word";
+  answerValue = optionValue;
+  isCorrect = askIsCorrect();
+
+  widthPercent = 6;
+  heightPercent = 4;
+
+  label = `Circular ${optionValue}`;
+}
     if (activeTool === "checkbox") {
       const optionValue = askAnswerValue(
         "Valor deste checkbox (ex.: A, True, Yes):",
@@ -738,14 +755,15 @@ export default function PdfCanvas({
       </div>
 
       <div style={styles.toolInfo}>
-        Ferramenta ativa:{" "}
-        <strong>
-          {activeTool === "select" && "Mover"}
-          {activeTool === "text" && "Texto"}
-          {activeTool === "choice" && "Alternativa"}
-          {activeTool === "checkbox" && "Checkbox"}
-        </strong>
-      </div>
+  Ferramenta ativa:{" "}
+  <strong>
+    {activeTool === "select" && "Mover"}
+    {activeTool === "text" && "Texto"}
+    {activeTool === "choice" && "Alternativa"}
+    {activeTool === "circle_word" && "Circular Palavra"}
+    {activeTool === "checkbox" && "Checkbox"}
+  </strong>
+</div>
 
       {selectedField && (
         <div style={styles.selectedInfo}>
