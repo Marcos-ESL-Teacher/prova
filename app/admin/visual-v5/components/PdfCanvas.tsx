@@ -37,6 +37,9 @@ export default function PdfCanvas({
   });
   const didMoveRef = useRef(false);
   const lastSaveRequestRef = useRef(0);
+  const renderTaskRef = useRef<any>(null);
+  const renderGenerationRef = useRef(0);
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [pdf, setPdf] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
@@ -121,16 +124,31 @@ export default function PdfCanvas({
   }, [pdfUrl]);
 
   useEffect(() => {
+    let disposed = false;
+
     async function renderPage() {
       if (!pdf || !canvasRef.current || !containerRef.current) return;
+
+      const generation = ++renderGenerationRef.current;
 
       try {
         setLoading(true);
         setErrorMessage("");
 
-        const page = await pdf.getPage(pageNumber);
-        const baseViewport = page.getViewport({ scale: 1 });
+        if (renderTaskRef.current) {
+          try {
+            renderTaskRef.current.cancel();
+          } catch {
+            // A tarefa anterior pode já ter terminado.
+          }
+          renderTaskRef.current = null;
+        }
 
+        const page = await pdf.getPage(pageNumber);
+
+        if (disposed || generation !== renderGenerationRef.current) return;
+
+        const baseViewport = page.getViewport({ scale: 1 });
         const containerWidth = containerRef.current.clientWidth || 900;
         const maxWidth = Math.min(containerWidth - 24, 1100);
         const scale = maxWidth / baseViewport.width;
@@ -151,28 +169,75 @@ export default function PdfCanvas({
         context.setTransform(ratio, 0, 0, ratio, 0, 0);
         context.clearRect(0, 0, viewport.width, viewport.height);
 
-        await page.render({
+        const renderTask = page.render({
           canvasContext: context,
           viewport,
-        }).promise;
+        });
+
+        renderTaskRef.current = renderTask;
+
+        await renderTask.promise;
+
+        if (renderTaskRef.current === renderTask) {
+          renderTaskRef.current = null;
+        }
+
+        if (disposed || generation !== renderGenerationRef.current) return;
 
         setCanvasSize({
           width: viewport.width,
           height: viewport.height,
         });
       } catch (error: any) {
-        setErrorMessage(error?.message || "Erro ao renderizar página.");
+        const isCancelled =
+          error?.name === "RenderingCancelledException" ||
+          String(error?.message || "").includes("Rendering cancelled");
+
+        if (
+          !isCancelled &&
+          !disposed &&
+          generation === renderGenerationRef.current
+        ) {
+          setErrorMessage(error?.message || "Erro ao renderizar página.");
+        }
       } finally {
-        setLoading(false);
+        if (!disposed && generation === renderGenerationRef.current) {
+          setLoading(false);
+        }
       }
     }
 
-    renderPage();
+    function handleResize() {
+      if (resizeTimerRef.current) {
+        clearTimeout(resizeTimerRef.current);
+      }
 
-    window.addEventListener("resize", renderPage);
+      resizeTimerRef.current = setTimeout(() => {
+        void renderPage();
+      }, 150);
+    }
+
+    void renderPage();
+    window.addEventListener("resize", handleResize);
 
     return () => {
-      window.removeEventListener("resize", renderPage);
+      disposed = true;
+      renderGenerationRef.current += 1;
+      window.removeEventListener("resize", handleResize);
+
+      if (resizeTimerRef.current) {
+        clearTimeout(resizeTimerRef.current);
+        resizeTimerRef.current = null;
+      }
+
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {
+          // A tarefa pode já ter terminado.
+        }
+        renderTaskRef.current = null;
+      }
     };
   }, [pdf, pageNumber]);
 

@@ -607,22 +607,19 @@ function renderVisualFieldV5(field: VisualField) {
   const questionKey = `visual_q_${field.question_number}`;
 
   if (field.field_type === "choice") {
-    const selected =
-      answers[questionKey] === String(field.answer_value || "");
+    const optionValue = String(field.answer_value || "");
+    const selected = answers[questionKey] === optionValue;
 
     return (
       <button
         key={field.id}
         type="button"
-        onClick={() =>
-          updateAnswer(
-            questionKey,
-            String(field.answer_value || "")
-          )
-        }
+        aria-pressed={selected}
+        aria-label={`Selecionar alternativa ${optionValue} da questão ${field.question_number}`}
+        onClick={() => updateAnswer(questionKey, optionValue)}
         style={{
-          ...styles.visualAnswerField,
-          ...(selected ? styles.visualChoiceSelected : {}),
+          ...styles.visualChoiceTarget,
+          ...(selected ? styles.visualChoiceTargetSelected : {}),
           left: `${field.x}%`,
           top: `${field.y}%`,
           width: `${field.width}%`,
@@ -630,7 +627,19 @@ function renderVisualFieldV5(field: VisualField) {
           pointerEvents: "auto",
         }}
       >
-        {field.answer_value}
+        <span
+          style={{
+            ...styles.visualChoiceMarker,
+            ...(selected ? styles.visualChoiceMarkerSelected : {}),
+          }}
+        >
+          <span
+            style={{
+              ...styles.visualChoiceDot,
+              opacity: selected ? 1 : 0,
+            }}
+          />
+        </span>
       </button>
     );
   }
@@ -1572,6 +1581,54 @@ const styles: any = {
     background: "rgba(219, 234, 254, 0.85)",
     color: "#1d4ed8",
     border: "3px solid #1d4ed8",
+  },
+
+  visualChoiceTarget: {
+    position: "absolute",
+    transform: "translate(-50%, -50%)",
+    padding: 0,
+    margin: 0,
+    border: "none",
+    background: "transparent",
+    cursor: "pointer",
+    outline: "none",
+    zIndex: 510,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxSizing: "border-box",
+  },
+
+  visualChoiceTargetSelected: {
+    background: "transparent",
+  },
+
+  visualChoiceMarker: {
+    width: "14px",
+    height: "14px",
+    borderRadius: "50%",
+    border: "1.5px solid rgba(37, 99, 235, 0.75)",
+    background: "rgba(255,255,255,0.72)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxSizing: "border-box",
+    boxShadow: "0 0 0 1px rgba(255,255,255,0.65)",
+    pointerEvents: "none",
+  },
+
+  visualChoiceMarkerSelected: {
+    border: "1.5px solid #2563eb",
+    background: "#ffffff",
+  },
+
+  visualChoiceDot: {
+    width: "7px",
+    height: "7px",
+    borderRadius: "50%",
+    background: "#2563eb",
+    opacity: 0,
+    pointerEvents: "none",
   },
 
   visualCircleWord: {

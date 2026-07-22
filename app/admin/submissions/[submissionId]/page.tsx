@@ -148,6 +148,9 @@ export default function SubmissionDetailPage() {
     const choiceFields = fields.filter(
       (field) => field.field_type === "choice"
     );
+    const circleWordFields = fields.filter(
+      (field) => field.field_type === "circle_word"
+    );
 
     if (checkboxFields.length > 0) {
       const correctValues = checkboxFields
@@ -179,6 +182,23 @@ export default function SubmissionDetailPage() {
         correct:
           normalizeAnswer(studentAnswer) === normalizeAnswer(correctAnswer),
         type: "choice",
+      };
+    }
+
+    if (circleWordFields.length > 0) {
+      const correctField =
+        circleWordFields.find((field) =>
+          Boolean(field.metadata?.correct_answer)
+        ) || circleWordFields[0];
+
+      const correctAnswer = String(correctField?.answer_value || "");
+
+      return {
+        studentAnswer,
+        correctAnswer,
+        correct:
+          normalizeAnswer(studentAnswer) === normalizeAnswer(correctAnswer),
+        type: "circle_word",
       };
     }
 
@@ -639,14 +659,16 @@ const pageFields = veeFields.filter(
               fields.find(
                 (field) =>
                   field.field_type !== "choice" &&
-                  field.field_type !== "checkbox"
+                  field.field_type !== "checkbox" &&
+                  field.field_type !== "circle_word"
               ) || fields[0];
 
             if (!textField) return;
 
             if (
               correction.type !== "choice" &&
-              correction.type !== "checkbox"
+              correction.type !== "checkbox" &&
+              correction.type !== "circle_word"
             ) {
               const x =
                 (Number(textField.x || 0) / 100) * pageWidthMm;
